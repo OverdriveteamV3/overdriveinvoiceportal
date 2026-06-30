@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import AdminIcon from "@/components/admin/AdminIcons";
 import { MASTER_ADMIN_USERNAME } from "@/lib/admin-auth-constants";
 
 type AuthMode = "sign-in" | "create";
@@ -15,6 +16,8 @@ export default function AdminSignInForm() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -31,6 +34,8 @@ export default function AdminSignInForm() {
     setError(null);
     setPassword("");
     setConfirmPassword("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     if (nextMode === "sign-in") {
       setUsername(MASTER_ADMIN_USERNAME);
     } else {
@@ -160,16 +165,30 @@ export default function AdminSignInForm() {
             <label className="doc-label" htmlFor="admin-password">
               Password
             </label>
-            <input
-              id="admin-password"
-              type="password"
-              className="field"
-              autoComplete={isCreate ? "new-password" : "current-password"}
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              disabled={submitting}
-              required
-            />
+            <div className="relative">
+              <input
+                id="admin-password"
+                type={showPassword ? "text" : "password"}
+                className="field pr-10"
+                autoComplete={isCreate ? "new-password" : "current-password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                disabled={submitting}
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((visible) => !visible)}
+                disabled={submitting}
+                className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 text-zinc-500 transition hover:text-zinc-800 disabled:opacity-50"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                <AdminIcon
+                  name={showPassword ? "eye-off" : "eye"}
+                  size={16}
+                />
+              </button>
+            </div>
           </div>
 
           {isCreate ? (
@@ -177,22 +196,40 @@ export default function AdminSignInForm() {
               <label className="doc-label" htmlFor="admin-confirm-password">
                 Confirm password
               </label>
-              <input
-                id="admin-confirm-password"
-                type="password"
-                className={`field ${
-                  showPasswordMatchHint
-                    ? passwordsMatch
-                      ? "border-emerald-300 ring-1 ring-emerald-200"
-                      : "border-red-300 ring-1 ring-red-200"
-                    : ""
-                }`}
-                autoComplete="new-password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                disabled={submitting}
-                required
-              />
+              <div className="relative">
+                <input
+                  id="admin-confirm-password"
+                  type={showConfirmPassword ? "text" : "password"}
+                  className={`field pr-10 ${
+                    showPasswordMatchHint
+                      ? passwordsMatch
+                        ? "border-emerald-300 ring-1 ring-emerald-200"
+                        : "border-red-300 ring-1 ring-red-200"
+                      : ""
+                  }`}
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  disabled={submitting}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setShowConfirmPassword((visible) => !visible)
+                  }
+                  disabled={submitting}
+                  className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 text-zinc-500 transition hover:text-zinc-800 disabled:opacity-50"
+                  aria-label={
+                    showConfirmPassword ? "Hide password" : "Show password"
+                  }
+                >
+                  <AdminIcon
+                    name={showConfirmPassword ? "eye-off" : "eye"}
+                    size={16}
+                  />
+                </button>
+              </div>
               {showPasswordMatchHint ? (
                 <p
                   className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium ${
