@@ -1,10 +1,25 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { Redis } from "@upstash/redis";
-import type { DatabaseSchema, StoredRecord } from "./dataBins";
 import { MASTER_PROFILE_ID } from "@/lib/admin-auth-constants";
+import type { DatabaseSchema, StoredRecord } from "./dataBins";
+import { DB_VERSION } from "./dataBins";
+import {
+  isSupabaseCloudBackend,
+  loadFromSupabase,
+  saveToSupabase,
+  useSupabaseStorage,
+} from "./supabaseDatabaseStore";
+import type { StorageBackend } from "./storageBackend";
 
-export const DB_VERSION = 1;
+export type { StorageBackend } from "./storageBackend";
+export {
+  getStorageBackendDescription,
+  getStorageBackendLabel,
+  isCloudStorageBackend,
+} from "./storageBackend";
+
+export { DB_VERSION } from "./dataBins";
 export const REDIS_DB_KEY = "overdrive:internal-db";
 
 const DB_DIR = path.join(process.cwd(), ".data");
@@ -123,7 +138,30 @@ async function saveToRedis(db: DatabaseSchema): Promise<void> {
   await getRedisClient().set(REDIS_DB_KEY, db);
 }
 
+function databaseHasData(db: DatabaseSchema): boolean {
+  return (
+    db.records.length > 0 ||
+    db.deletedRecords.length > 0 ||
+    (db.adminProfiles?.length ?? 0) > 0 ||
+    Boolean(db.masterAccount && Object.keys(db.masterAccount).length > 0)
+  );
+}
+
 export async function loadDatabase(): Promise<DatabaseSchema> {
+  if (useSupabaseStorage()) {
+    const db = normalizeDatabase(await loadFromSupabase());
+    if (databaseHasData(db) || !useRedisStorage()) {
+      return db;
+    }
+
+    const legacy = normalizeDatabase(await loadFromRedis());
+    if (databaseHasData(legacy)) {
+      await saveToSupabase(legacy);
+      return legacy;
+    }
+
+    return db;
+  }
   if (useRedisStorage()) {
     return loadFromRedis();
   }
@@ -131,6 +169,10 @@ export async function loadDatabase(): Promise<DatabaseSchema> {
 }
 
 export async function saveDatabase(db: DatabaseSchema): Promise<void> {
+  if (useSupabaseStorage()) {
+    await saveToSupabase(db);
+    return;
+  }
   if (useRedisStorage()) {
     await saveToRedis(db);
     return;
@@ -138,6 +180,11 @@ export async function saveDatabase(db: DatabaseSchema): Promise<void> {
   await saveToFile(db);
 }
 
-export function getStorageBackend(): "redis" | "local" {
+export function getStorageBackend(): StorageBackend {
+  if (useSupabaseStorage()) return "supabase";
   return useRedisStorage() ? "redis" : "local";
+}
+
+export function isCloudStorageEnabled(): boolean {
+  return isSupabaseCloudBackend() || useRedisStorage();
 }

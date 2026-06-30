@@ -19,10 +19,15 @@ import {
   purgeAllDeletedRecords,
   restoreDeletedRecord,
 } from "@/lib/storage/dbClient";
+import type { StorageBackend } from "@/lib/storage/storageBackend";
+import {
+  getStorageBackendLabel,
+  isCloudStorageBackend,
+} from "@/lib/storage/storageBackend";
 
 type AdminSettingsPanelProps = {
   bins: BinSummary[];
-  backend: "redis" | "local";
+  backend: StorageBackend;
   totalRecords: number;
   initialDeletedRecords: DeletedRecord[];
   stripeConfigured: boolean;
@@ -335,7 +340,7 @@ export default function AdminSettingsPanel({
   };
 
   const integrationsConnected = [
-    backend === "redis",
+    isCloudStorageBackend(backend),
     emailConfigured,
     stripeConfigured,
   ].filter(Boolean).length;
@@ -541,13 +546,13 @@ export default function AdminSettingsPanel({
                 title="Cloud storage"
                 description="Where quotes, invoices, and catalog data are stored."
                 icon="cloud"
-                connected={backend === "redis"}
+                connected={isCloudStorageBackend(backend)}
               >
                 <dl className="grid gap-2 text-sm">
                   <div className="flex justify-between gap-4">
                     <dt className="text-zinc-500">Backend</dt>
                     <dd className="font-medium text-zinc-900">
-                      {backend === "redis" ? "Vercel Cloud (Redis)" : "Local file"}
+                      {getStorageBackendLabel(backend)}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4">

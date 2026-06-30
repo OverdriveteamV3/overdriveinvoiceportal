@@ -1,0 +1,2 @@
+-- Optional seed data for local `supabase db reset`.
+-- Production data lives in Upstash Redis / .data until the app reads from Postgres.

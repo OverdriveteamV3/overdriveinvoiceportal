@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { getStorageBackend } from "@/lib/storage/internalDatabase";
+import { getStorageBackend, isCloudStorageEnabled } from "@/lib/storage/internalDatabase";
 
 export async function GET() {
+  const backend = getStorageBackend();
   return NextResponse.json({
-    backend: getStorageBackend(),
-    cloud: getStorageBackend() === "redis",
+    backend,
+    cloud: isCloudStorageEnabled(),
   });
 }

@@ -664,7 +664,7 @@ export async function seedDemoDatabase(): Promise<SyncResult> {
 }
 
 export async function fetchStorageStatus(): Promise<{
-  backend: "redis" | "local";
+  backend: "supabase" | "redis" | "local";
   cloud: boolean;
 }> {
   const response = await fetch("/api/storage/status", { cache: "no-store" });

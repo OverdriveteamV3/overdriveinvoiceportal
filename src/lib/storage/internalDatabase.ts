@@ -494,5 +494,5 @@ export function parseBinId(value: string): DataBinId | null {
   return isDataBinId(value) ? value : null;
 }
 
-export { emptyDatabase, getStorageBackend } from "./databaseStore";
+export { emptyDatabase, getStorageBackend, isCloudStorageEnabled } from "./databaseStore";
 export { recordProfileId } from "@/lib/storage/storage-scope";

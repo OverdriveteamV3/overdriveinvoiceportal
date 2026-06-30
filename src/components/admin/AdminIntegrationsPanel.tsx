@@ -1,9 +1,15 @@
 import Link from "next/link";
 import AdminIcon from "@/components/admin/AdminIcons";
 import type { AdminIconName } from "@/lib/admin-icons";
+import type { StorageBackend } from "@/lib/storage/storageBackend";
+import {
+  getStorageBackendDescription,
+  getStorageBackendLabel,
+  isCloudStorageBackend,
+} from "@/lib/storage/storageBackend";
 
 export type AdminIntegrationsInfo = {
-  backend: "redis" | "local";
+  backend: StorageBackend;
   stripeConfigured: boolean;
   emailConfigured: boolean;
   emailProvider: string | null;
@@ -77,16 +83,14 @@ export default function AdminIntegrationsPanel({
         <IntegrationCard
           title="Cloud storage"
           description="Where quotes, invoices, and catalog data are stored."
-          connected={backend === "redis"}
+          connected={isCloudStorageBackend(backend)}
           icon="cloud"
         >
           <p className="text-sm font-medium text-zinc-800">
-            {backend === "redis" ? "Vercel Cloud (Redis)" : "Local file storage"}
+            {getStorageBackendLabel(backend)}
           </p>
           <p className="mt-1 text-xs text-zinc-500">
-            {backend === "redis"
-              ? "Data syncs across devices via Upstash Redis on Vercel."
-              : "Development mode — data is stored on this machine only."}
+            {getStorageBackendDescription(backend)}
           </p>
         </IntegrationCard>
 

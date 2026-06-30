@@ -49,6 +49,8 @@ export const DATA_BINS = {
 
 export type DataBinId = keyof typeof DATA_BINS;
 
+export const DB_VERSION = 1;
+
 export interface StoredRecord {
   id: string;
   binId: DataBinId;
