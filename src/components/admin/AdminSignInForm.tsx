@@ -165,11 +165,11 @@ export default function AdminSignInForm() {
             <label className="doc-label" htmlFor="admin-password">
               Password
             </label>
-            <div className="relative">
+            <div className="flex gap-2">
               <input
                 id="admin-password"
                 type={showPassword ? "text" : "password"}
-                className="field pr-10"
+                className="field min-w-0 flex-1"
                 autoComplete={isCreate ? "new-password" : "current-password"}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -180,7 +180,7 @@ export default function AdminSignInForm() {
                 type="button"
                 onClick={() => setShowPassword((visible) => !visible)}
                 disabled={submitting}
-                className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 text-zinc-500 transition hover:text-zinc-800 disabled:opacity-50"
+                className="flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50/50 px-2.5 text-zinc-500 transition hover:border-zinc-300 hover:bg-white hover:text-zinc-800 disabled:opacity-50"
                 aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 <AdminIcon
@@ -196,11 +196,11 @@ export default function AdminSignInForm() {
               <label className="doc-label" htmlFor="admin-confirm-password">
                 Confirm password
               </label>
-              <div className="relative">
+              <div className="flex gap-2">
                 <input
                   id="admin-confirm-password"
                   type={showConfirmPassword ? "text" : "password"}
-                  className={`field pr-10 ${
+                  className={`field min-w-0 flex-1 ${
                     showPasswordMatchHint
                       ? passwordsMatch
                         ? "border-emerald-300 ring-1 ring-emerald-200"
@@ -219,7 +219,7 @@ export default function AdminSignInForm() {
                     setShowConfirmPassword((visible) => !visible)
                   }
                   disabled={submitting}
-                  className="absolute top-1/2 right-2.5 -translate-y-1/2 rounded p-0.5 text-zinc-500 transition hover:text-zinc-800 disabled:opacity-50"
+                  className="flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50/50 px-2.5 text-zinc-500 transition hover:border-zinc-300 hover:bg-white hover:text-zinc-800 disabled:opacity-50"
                   aria-label={
                     showConfirmPassword ? "Hide password" : "Show password"
                   }
