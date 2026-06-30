@@ -12,9 +12,9 @@ import AdminIntegrationsPanel, {
 } from "@/components/admin/AdminIntegrationsPanel";
 import AdminLineItemsPanel from "@/components/admin/AdminLineItemsPanel";
 import AdminSystemsApplicationsPanel from "@/components/admin/AdminSystemsApplicationsPanel";
-import AdminProfileTag from "@/components/admin/AdminProfileTag";
-import AdminSidebar from "@/components/admin/AdminSidebar";
+import AdminHeader from "@/components/admin/AdminHeader";
 import AdminIcon from "@/components/admin/AdminIcons";
+import AdminSidebar from "@/components/admin/AdminSidebar";
 import {
   adminReturnHref,
   adminReturnLabel,
@@ -311,25 +311,15 @@ export default function AdminDataBinsPanel({
         onDeleted={handleDocumentDeleted}
         onUpdated={handleDocumentUpdated}
       />
-      <header className="admin-header">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-              Over Drive OS Dashboard
-            </p>
-            <h1 className="text-lg font-semibold text-zinc-900">Dashboard</h1>
-          </div>
-          <nav className="flex flex-wrap items-center gap-2">
-            <AdminProfileTag />
-            <Link href="/" className="btn-outline text-xs">
-              Website
-            </Link>
-            <Link href="/invoice" className="btn-outline text-xs">
-              Invoice App
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <AdminHeader
+        sidebar={{
+          bins,
+          activeView,
+          onSelectHome: handleSelectHome,
+          onSelectBin: handleSelectBinFromSidebar,
+          onSelectIntegrations: handleSelectIntegrationsFromSidebar,
+        }}
+      />
 
       <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[280px_1fr]">
         <AdminSidebar

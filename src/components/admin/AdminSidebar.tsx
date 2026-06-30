@@ -12,12 +12,14 @@ import AdminIcon from "@/components/admin/AdminIcons";
 import AdminSidebarSignOut from "@/components/admin/AdminSidebarSignOut";
 import type { AdminIconName } from "@/lib/admin-icons";
 
-type AdminSidebarProps = {
+export type AdminSidebarProps = {
   bins: BinSummary[];
   activeView: AdminView;
   onSelectHome: () => void;
   onSelectBin: (binId: DataBinId) => void;
   onSelectIntegrations: () => void;
+  onNavigate?: () => void;
+  embedded?: boolean;
 };
 
 const NAV_SECTIONS = ["overview", "people", "documents", "catalog", "connect"] as const;
@@ -143,12 +145,14 @@ function NavItem({
   );
 }
 
-export default function AdminSidebar({
+export function AdminSidebarNav({
   bins,
   activeView,
   onSelectHome,
   onSelectBin,
   onSelectIntegrations,
+  onNavigate,
+  embedded = false,
 }: AdminSidebarProps) {
   const pathname = usePathname();
   const settingsActive = pathname === "/admin/settings";
@@ -164,83 +168,103 @@ export default function AdminSidebar({
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  return (
-    <aside className="admin-sidebar">
-      <div className="admin-sidebar-card">
+  const navigate = (action: () => void) => {
+    action();
+    onNavigate?.();
+  };
+
+  const navContent = (
+    <>
+      {!embedded ? (
         <div className="admin-sidebar-header">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
             Navigation
           </p>
         </div>
+      ) : null}
 
-        <nav className="space-y-3">
-          <NavSection title="Overview" collapsible={false}>
-            <NavItem
-              active={activeView === "home"}
-              label="Home"
-              description="Dashboard and business metrics"
-              icon="home"
-              onClick={onSelectHome}
-            />
-          </NavSection>
+      <nav className="space-y-3">
+        <NavSection title="Overview" collapsible={false}>
+          <NavItem
+            active={activeView === "home"}
+            label="Home"
+            description="Dashboard and business metrics"
+            icon="home"
+            onClick={() => navigate(onSelectHome)}
+          />
+        </NavSection>
 
-          {ADMIN_NAV_GROUPS.map((group) => {
-            const key = group.title.toLowerCase() as NavSectionKey;
-            const collapsible = COLLAPSIBLE_SECTIONS.has(key);
-            return (
-              <NavSection
-                key={group.title}
-                title={group.title}
-                collapsible={collapsible}
-                expanded={expanded[key]}
-                onToggle={() => toggle(key)}
-                summary={groupItemCount(bins, group.items)}
-              >
-                {group.items.map((binId) => {
-                  const meta = DATA_BINS[binId];
-                  return (
-                    <NavItem
-                      key={binId}
-                      active={activeView === binId}
-                      label={meta.label}
-                      description={meta.description}
-                      icon={meta.icon}
-                      count={countForBin(bins, binId)}
-                      onClick={() => onSelectBin(binId)}
-                    />
-                  );
-                })}
-              </NavSection>
-            );
-          })}
+        {ADMIN_NAV_GROUPS.map((group) => {
+          const key = group.title.toLowerCase() as NavSectionKey;
+          const collapsible = COLLAPSIBLE_SECTIONS.has(key);
+          return (
+            <NavSection
+              key={group.title}
+              title={group.title}
+              collapsible={collapsible}
+              expanded={expanded[key]}
+              onToggle={() => toggle(key)}
+              summary={groupItemCount(bins, group.items)}
+            >
+              {group.items.map((binId) => {
+                const meta = DATA_BINS[binId];
+                return (
+                  <NavItem
+                    key={binId}
+                    active={activeView === binId}
+                    label={meta.label}
+                    description={meta.description}
+                    icon={meta.icon}
+                    count={countForBin(bins, binId)}
+                    onClick={() => navigate(() => onSelectBin(binId))}
+                  />
+                );
+              })}
+            </NavSection>
+          );
+        })}
 
-          <NavSection title="Connect" collapsible={false}>
-            <NavItem
-              active={activeView === "integrations"}
-              label="Integrations"
-              description="Email, payments, and cloud storage"
-              icon="integrations"
-              onClick={onSelectIntegrations}
-            />
-          </NavSection>
-        </nav>
+        <NavSection title="Connect" collapsible={false}>
+          <NavItem
+            active={activeView === "integrations"}
+            label="Integrations"
+            description="Email, payments, and cloud storage"
+            icon="integrations"
+            onClick={() => navigate(onSelectIntegrations)}
+          />
+        </NavSection>
+      </nav>
 
-        <div className="admin-sidebar-footer">
-          <Link
-            href="/admin/settings"
-            className={`admin-sidebar-link ${settingsActive ? "admin-sidebar-link-active" : ""}`}
-          >
-            <span className="admin-nav-icon admin-nav-icon-muted" aria-hidden>
-              <AdminIcon name="settings" size={16} />
-            </span>
-            <span className="flex-1 text-left text-[13px] font-medium text-zinc-700">
-              Settings
-            </span>
-            <AdminIcon name="chevron-right" size={14} className="text-zinc-300" />
-          </Link>
-          <AdminSidebarSignOut />
-        </div>
+      <div className="admin-sidebar-footer">
+        <Link
+          href="/admin/settings"
+          className={`admin-sidebar-link ${settingsActive ? "admin-sidebar-link-active" : ""}`}
+          onClick={() => onNavigate?.()}
+        >
+          <span className="admin-nav-icon admin-nav-icon-muted" aria-hidden>
+            <AdminIcon name="settings" size={16} />
+          </span>
+          <span className="flex-1 text-left text-[13px] font-medium text-zinc-700">
+            Settings
+          </span>
+          <AdminIcon name="chevron-right" size={14} className="text-zinc-300" />
+        </Link>
+        <AdminSidebarSignOut />
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="admin-sidebar-embedded">{navContent}</div>;
+  }
+
+  return <div className="admin-sidebar-card">{navContent}</div>;
+}
+
+export default function AdminSidebar(props: AdminSidebarProps) {
+  return (
+    <aside className="admin-sidebar hidden lg:block">
+      <AdminSidebarNav {...props} />
     </aside>
   );
 }

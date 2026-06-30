@@ -208,6 +208,12 @@ export default function AdminIcon({
           <path d="M1 1l22 22" />
         </Svg>
       );
+    case "menu":
+      return (
+        <Svg className={cn} size={size}>
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </Svg>
+      );
     default:
       return (
         <Svg className={cn} size={size}>

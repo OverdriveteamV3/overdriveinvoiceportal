@@ -4,8 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 import AdminAccountProfileCard from "@/components/admin/AdminAccountProfileCard";
+import AdminHeader from "@/components/admin/AdminHeader";
 import AdminIcon from "@/components/admin/AdminIcons";
-import AdminProfileTag from "@/components/admin/AdminProfileTag";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import type { AdminIconName } from "@/lib/admin-icons";
 import type { AdminAccountSettings } from "@/lib/admin-account";
@@ -420,25 +420,17 @@ export default function AdminSettingsPanel({
 
   return (
     <div className="min-h-screen bg-[#eceef1]">
-      <header className="admin-header">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-              Over Drive OS Dashboard
-            </p>
-            <h1 className="text-lg font-semibold text-zinc-900">Dashboard</h1>
-          </div>
-          <nav className="flex flex-wrap items-center gap-2">
-            <AdminProfileTag />
-            <Link href="/" className="btn-outline text-xs">
-              Website
-            </Link>
-            <Link href="/invoice" className="btn-outline text-xs">
-              Invoice App
-            </Link>
-          </nav>
-        </div>
-      </header>
+      <AdminHeader
+        sidebar={{
+          bins,
+          activeView: "home",
+          onSelectHome: () => router.push("/admin"),
+          onSelectBin: (binId: DataBinId) =>
+            router.push(`/admin?view=${binId}&from=settings`),
+          onSelectIntegrations: () =>
+            router.push("/admin?view=integrations&from=settings"),
+        }}
+      />
 
       <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[280px_1fr]">
         <AdminSidebar
