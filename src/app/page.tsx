@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import LandingPage from "@/components/LandingPage";
+import { redirect } from "next/navigation";
 import {
   ADMIN_SESSION_COOKIE,
   verifyAdminSessionToken,
@@ -16,5 +16,5 @@ export default async function Home() {
     cookieStore.get(ADMIN_SESSION_COOKIE)?.value
   );
 
-  return <LandingPage profile={profile} />;
+  redirect(profile ? "/admin" : "/admin/sign-in");
 }
