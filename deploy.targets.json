@@ -1,7 +1,8 @@
 {
   "github": "https://github.com/OverdriveteamV3/overdriveinvoiceportal.git",
   "vercel": {
-    "team": "overdriveteami7-3267",
+    "account": "overdriveteami7-3267",
+    "team": "over-drive-host",
     "project": "overdriveinvoiceportal",
     "dashboard": "https://vercel.com/overdriveteami7-3267"
   },
