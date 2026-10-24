@@ -1,5 +1,15 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Deployment targets
+
+Later deploys and database pushes use [deploy.targets.json](deploy.targets.json):
+
+- GitHub: `https://github.com/OverdriveteamV3/overdriveinvoiceportal.git`
+- Vercel team: `overdriveteami7-3267` (`https://vercel.com/overdriveteami7-3267`), project `overdriveinvoiceportal`
+- Supabase: `https://iyqayjplyujfjlobegze.supabase.co` (ref `iyqayjplyujfjlobegze`)
+
+Set `SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY` in `.env.local` and on that Vercel project. Do not commit those secrets.
+
 ## Getting Started
 
 First, run the development server:

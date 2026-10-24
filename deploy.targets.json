@@ -1,0 +1,12 @@
+{
+  "github": "https://github.com/OverdriveteamV3/overdriveinvoiceportal.git",
+  "vercel": {
+    "team": "overdriveteami7-3267",
+    "project": "overdriveinvoiceportal",
+    "dashboard": "https://vercel.com/overdriveteami7-3267"
+  },
+  "supabase": {
+    "url": "https://iyqayjplyujfjlobegze.supabase.co",
+    "ref": "iyqayjplyujfjlobegze"
+  }
+}
