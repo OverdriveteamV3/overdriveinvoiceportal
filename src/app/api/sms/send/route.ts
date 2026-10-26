@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import type { DraftState } from "@/lib/drafts";
+import { getAdminSessionProfile } from "@/lib/admin-auth-server";
 import {
   hasTwilioConfig,
   sendInvoiceSmsServer,
 } from "@/lib/invoice-sms-server";
 
 export async function POST(request: Request) {
+  const profile = await getAdminSessionProfile();
+  if (!profile) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
   const body = await request.json();
   const state = body.state as DraftState | undefined;
   const to =

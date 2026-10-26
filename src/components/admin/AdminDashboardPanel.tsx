@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminBalanceBreakdownCard from "@/components/admin/AdminBalanceBreakdownCard";
 import AdminClientOnboardModal from "@/components/admin/AdminClientOnboardModal";
 import { formatMoney } from "@/lib/drafts";
@@ -9,6 +9,8 @@ import type { AdminDashboardActivity, AdminDashboardStats } from "@/lib/admin-da
 import { activityIconName, type AdminIconName } from "@/lib/admin-icons";
 import type { DataBinId } from "@/lib/storage/dataBins";
 import AdminIcon from "@/components/admin/AdminIcons";
+import { adminViewPath } from "@/components/admin/admin-nav";
+import { formatCents } from "@/lib/crm/money";
 
 type AdminDashboardPanelProps = {
   stats: AdminDashboardStats;
@@ -140,6 +142,27 @@ export default function AdminDashboardPanel({
 }: AdminDashboardPanelProps) {
   const invoiceTotal = stats.openInvoices + stats.closedInvoices;
   const [clientModalOpen, setClientModalOpen] = useState(false);
+  const [crm, setCrm] = useState<{
+    openPipelineCents: number;
+    invoicedCents: number;
+    netCollectedCents: number;
+    overdueCents: number;
+    openTasks: number;
+    projects: number;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/crm/overview")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (!cancelled && body) setCrm(body);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <div className="space-y-6 p-6">
@@ -178,6 +201,47 @@ export default function AdminDashboardPanel({
           </div>
         </div>
       </section>
+
+      {crm ? (
+        <section className="grid gap-3 sm:grid-cols-3">
+          {[
+            { label: "Open pipeline", value: formatCents(crm.openPipelineCents), detail: "Estimates, not revenue" },
+            { label: "Invoiced", value: formatCents(crm.invoicedCents), detail: "Issued CRM invoices" },
+            { label: "Net collected", value: formatCents(crm.netCollectedCents), detail: "Succeeded payments minus refunds" },
+            { label: "Overdue", value: formatCents(crm.overdueCents), detail: "Outstanding past due" },
+            {
+              label: "Projects",
+              value: String(crm.projects),
+              detail: `${crm.openTasks} open tasks`,
+              href: adminViewPath("projects", "dashboard"),
+            },
+          ].map((card) => {
+            const body = (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{card.label}</p>
+                <p className="mt-1 text-lg font-semibold text-zinc-900">{card.value}</p>
+                <p className="text-xs text-zinc-500">{card.detail}</p>
+              </>
+            );
+            if (!card.href) {
+              return (
+                <article key={card.label} className="rounded-lg border border-zinc-200 bg-white p-4">
+                  {body}
+                </article>
+              );
+            }
+            return (
+              <Link
+                key={card.label}
+                href={card.href}
+                className="rounded-lg border border-zinc-200 bg-white p-4 transition hover:border-zinc-400"
+              >
+                {body}
+              </Link>
+            );
+          })}
+        </section>
+      ) : null}
 
       <section className="admin-metric-grid">
         <MetricCard

@@ -6,7 +6,11 @@ import { useEffect, useState } from "react";
 import { DATA_BINS, type BinSummary, type DataBinId } from "@/lib/storage/dataBins";
 import {
   ADMIN_NAV_GROUPS,
+  CRM_NAV,
+  isCrmView,
+  isDataBinView,
   type AdminView,
+  type CrmView,
 } from "@/components/admin/admin-nav";
 import AdminIcon from "@/components/admin/AdminIcons";
 import AdminSidebarSignOut from "@/components/admin/AdminSidebarSignOut";
@@ -18,11 +22,12 @@ export type AdminSidebarProps = {
   onSelectHome: () => void;
   onSelectBin: (binId: DataBinId) => void;
   onSelectIntegrations: () => void;
+  onSelectCrm?: (view: CrmView) => void;
   onNavigate?: () => void;
   embedded?: boolean;
 };
 
-const NAV_SECTIONS = ["overview", "people", "documents", "catalog", "connect"] as const;
+const NAV_SECTIONS = ["overview", "people", "documents", "services", "connect"] as const;
 type NavSectionKey = (typeof NAV_SECTIONS)[number];
 
 const DEFAULT_EXPANDED = Object.fromEntries(
@@ -30,10 +35,10 @@ const DEFAULT_EXPANDED = Object.fromEntries(
 ) as Record<NavSectionKey, boolean>;
 
 function sectionKeyForView(view: AdminView): NavSectionKey {
-  if (view === "home") return "overview";
+  if (view === "home" || isCrmView(view)) return "overview";
   if (view === "integrations") return "connect";
   for (const group of ADMIN_NAV_GROUPS) {
-    if (group.items.includes(view)) {
+    if (isDataBinView(view) && group.items.includes(view)) {
       return group.title.toLowerCase() as NavSectionKey;
     }
   }
@@ -48,7 +53,7 @@ function groupItemCount(bins: BinSummary[], items: DataBinId[]): number {
   return items.reduce((sum, binId) => sum + countForBin(bins, binId), 0);
 }
 
-const COLLAPSIBLE_SECTIONS = new Set<NavSectionKey>(["documents", "catalog"]);
+const COLLAPSIBLE_SECTIONS = new Set<NavSectionKey>(["documents", "services"]);
 
 function NavSection({
   title,
@@ -151,6 +156,7 @@ export function AdminSidebarNav({
   onSelectHome,
   onSelectBin,
   onSelectIntegrations,
+  onSelectCrm,
   onNavigate,
   embedded = false,
 }: AdminSidebarProps) {
@@ -159,9 +165,31 @@ export function AdminSidebarNav({
   const [expanded, setExpanded] =
     useState<Record<NavSectionKey, boolean>>(DEFAULT_EXPANDED);
 
+  const [supportAlerts, setSupportAlerts] = useState(0);
+
   useEffect(() => {
     const key = sectionKeyForView(activeView);
     setExpanded((prev) => ({ ...prev, [key]: true }));
+  }, [activeView]);
+
+  useEffect(() => {
+    let stop = false;
+    async function loadAlerts() {
+      try {
+        const response = await fetch("/api/crm/support");
+        if (!response.ok) return;
+        const body = await response.json();
+        if (!stop) setSupportAlerts(Number(body.unread) || 0);
+      } catch {
+        // The nav still works when the support desk is unavailable.
+      }
+    }
+    void loadAlerts();
+    const timer = window.setInterval(loadAlerts, 15000);
+    return () => {
+      stop = true;
+      window.clearInterval(timer);
+    };
   }, [activeView]);
 
   const toggle = (key: NavSectionKey) => {
@@ -223,6 +251,32 @@ export function AdminSidebarNav({
             </NavSection>
           );
         })}
+
+        <NavSection title="Workspace" collapsible={false}>
+          {CRM_NAV.map((item) => (
+            <NavItem
+              key={item.id}
+              active={activeView === item.id}
+              label={item.label}
+              description={item.description}
+              icon={
+                item.id === "messages"
+                  ? "mail"
+                  : item.id === "pipeline"
+                  ? "quotes"
+                  : item.id === "orders"
+                    ? "documents"
+                    : item.id === "projects"
+                      ? "folder-open"
+                      : item.id === "wallet"
+                        ? "credit-card"
+                        : "clock"
+              }
+              count={item.id === "messages" && supportAlerts > 0 ? supportAlerts : undefined}
+              onClick={() => navigate(() => onSelectCrm?.(item.id))}
+            />
+          ))}
+        </NavSection>
 
         <NavSection title="Connect" collapsible={false}>
           <NavItem

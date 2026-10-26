@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppInitSync } from "@/components/AppInitSync";
+import CookieNotice from "@/components/home/CookieNotice";
+import SupportChat from "@/components/home/SupportChat";
+import { getLocale } from "@/lib/get-locale";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,19 +21,22 @@ export const metadata: Metadata = {
   description: "Corporate invoice and quote dashboard for Over Drive OS",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const locale = await getLocale();
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <AppInitSync />
         {children}
+        <CookieNotice locale={locale} />
+        <SupportChat locale={locale} />
       </body>
     </html>
   );

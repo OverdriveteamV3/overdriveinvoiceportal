@@ -429,6 +429,7 @@ export default function AdminSettingsPanel({
             router.push(`/admin?view=${binId}&from=settings`),
           onSelectIntegrations: () =>
             router.push("/admin?view=integrations&from=settings"),
+          onSelectCrm: (view) => router.push(`/admin?view=${view}&from=settings`),
         }}
       />
 
@@ -443,6 +444,7 @@ export default function AdminSettingsPanel({
           onSelectIntegrations={() =>
             router.push("/admin?view=integrations&from=settings")
           }
+          onSelectCrm={(view) => router.push(`/admin?view=${view}&from=settings`)}
         />
 
         <main className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">

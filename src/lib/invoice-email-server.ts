@@ -111,6 +111,45 @@ function isResendTestModeError(message: string): boolean {
   );
 }
 
+export async function sendPlainEmail(input: {
+  to: string;
+  subject: string;
+  text: string;
+}): Promise<void> {
+  if (!hasEmailConfig()) {
+    throw new Error("Email is not configured.");
+  }
+  const html = `<p>${input.text.replace(/</g, "&lt;").replace(/\n/g, "<br>")}</p>`;
+  if (hasSmtpConfig()) {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: process.env.SMTP_SECURE === "true",
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+    await transporter.sendMail({
+      from: getFromAddress(),
+      to: input.to,
+      subject: input.subject,
+      html,
+      text: input.text,
+    });
+    return;
+  }
+  const resend = new Resend(process.env.RESEND_API_KEY!);
+  const { error } = await resend.emails.send({
+    from: getFromAddress(),
+    to: [input.to],
+    subject: input.subject,
+    html,
+    text: input.text,
+  });
+  if (error) throw new Error(error.message || "Failed to send email");
+}
+
 export async function sendInvoiceEmail(
   state: DraftState,
   to: string

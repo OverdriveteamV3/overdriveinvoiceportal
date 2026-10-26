@@ -11,18 +11,15 @@ import {
 } from "@/components/admin/AdminSidebar";
 
 type AdminHeaderProps = {
-  eyebrow?: string;
   title?: string;
   sidebar?: AdminSidebarProps;
 };
 
 const HEADER_LINKS = [
-  { href: "/", label: "Website" },
   { href: "/invoice", label: "Invoice App" },
 ] as const;
 
 export default function AdminHeader({
-  eyebrow = "Over Drive OS Dashboard",
   title = "Dashboard",
   sidebar,
 }: AdminHeaderProps) {
@@ -103,21 +100,21 @@ export default function AdminHeader({
   return (
     <header className="admin-header">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
-        <div className="min-w-0 hidden lg:block">
-          <p className="truncate text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-            {eyebrow}
-          </p>
-          <h1 className="truncate text-lg font-semibold text-zinc-900">{title}</h1>
+        <div className="admin-header-brand hidden lg:block">
+          <Link href="/" className="admin-header-back">
+            <AdminIcon name="chevron-left" size={14} />
+            Back to website
+          </Link>
+          <h1 className="truncate">{title}</h1>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:flex-none lg:justify-end">
-          <div className="min-w-0 lg:hidden">
-            <p className="truncate text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-400">
-              {eyebrow}
-            </p>
-            <h1 className="truncate text-base font-semibold text-zinc-900">
-              {title}
-            </h1>
+          <div className="admin-header-brand min-w-0 lg:hidden">
+            <Link href="/" className="admin-header-back">
+              <AdminIcon name="chevron-left" size={14} />
+              Back to website
+            </Link>
+            <h1 className="truncate text-base">{title}</h1>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">

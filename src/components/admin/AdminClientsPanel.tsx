@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminClientDetailModal from "@/components/admin/AdminClientDetailModal";
 import { AdminClientAvatar } from "@/components/admin/AdminClientProfileUpload";
 import AdminIcon from "@/components/admin/AdminIcons";
+import { PROJECT_STAGE_LABELS, type ProjectStage } from "@/lib/crm/stages";
 import {
   clientCatalogFromRecord,
   computeClientBalanceStats,
@@ -17,6 +18,13 @@ type AdminClientsPanelProps = {
   records: StoredRecord[];
   loading: boolean;
   onRefresh: () => void | Promise<void>;
+};
+
+type JobProject = {
+  id: string;
+  name: string;
+  stage: string;
+  clients?: { display_name?: string; company_name?: string; email?: string } | null;
 };
 
 function clientInitials(clientName: string, companyName: string): string {
@@ -49,6 +57,7 @@ export default function AdminClientsPanel({
     null
   );
   const [documentRecords, setDocumentRecords] = useState<StoredRecord[]>([]);
+  const [jobs, setJobs] = useState<JobProject[]>([]);
 
   const loadDocumentRecords = useCallback(async () => {
     try {
@@ -71,6 +80,44 @@ export default function AdminClientsPanel({
   useEffect(() => {
     void loadDocumentRecords();
   }, [loadDocumentRecords, records]);
+
+  useEffect(() => {
+    setSelectedClient((current) => {
+      if (!current) return current;
+      const next = records.find((record) => record.id === current.id) ?? null;
+      return next === current ? current : next;
+    });
+  }, [records]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/crm/projects")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (!cancelled) setJobs(body?.projects ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setJobs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [records]);
+
+  const jobFor = useCallback(
+    (record: StoredRecord) => {
+      const catalog = clientCatalogFromRecord(record);
+      const email = catalog.email.trim().toLowerCase();
+      const name = (catalog.clientName || record.label).trim().toLowerCase();
+      return jobs.find((job) => {
+        const client = job.clients;
+        const jobEmail = client?.email?.trim().toLowerCase() ?? "";
+        const jobName = (client?.company_name || client?.display_name || "").trim().toLowerCase();
+        return (email !== "" && email === jobEmail) || (name !== "" && name === jobName);
+      });
+    },
+    [jobs]
+  );
 
   const sortedRecords = useMemo(
     () =>
@@ -110,15 +157,6 @@ export default function AdminClientsPanel({
 
   return (
     <>
-      <AdminClientDetailModal
-        client={selectedClient}
-        documentRecords={documentRecords}
-        onClose={() => setSelectedClient(null)}
-        onSaved={handleRefresh}
-        onDeleted={handleRefresh}
-        onDocumentsChanged={handleRefresh}
-      />
-
       <div className="admin-client-list">
         <div className="admin-client-list-header">
           <p className="admin-client-list-title">Directory</p>
@@ -137,13 +175,28 @@ export default function AdminClientsPanel({
             );
             const hasOpenBalance = balances.openBalance > 0.01;
             const hasOverdue = balances.overdueBalance > 0.01;
+            const job = jobFor(record);
+            const stageLabel = job
+              ? PROJECT_STAGE_LABELS[job.stage as ProjectStage] ?? job.stage
+              : "";
+
+            const expanded = selectedClient?.id === record.id;
 
             return (
-              <li key={record.id}>
+              <li
+                key={record.id}
+                className={`admin-client-card${expanded ? " admin-client-card-open" : ""}`}
+              >
+                <div className="flex items-stretch">
                 <button
                   type="button"
-                  onClick={() => setSelectedClient(record)}
-                  className="admin-client-row group"
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setSelectedClient((current) =>
+                      current?.id === record.id ? null : record
+                    )
+                  }
+                  className="admin-client-row admin-client-row-inset group min-w-0 flex-1"
                 >
                   <AdminClientAvatar
                     profileImage={catalog.profileImage}
@@ -157,6 +210,8 @@ export default function AdminClientsPanel({
                     <span className="admin-client-name">{record.label}</span>
                     <span className="admin-client-meta">
                       {clientMeta(catalog)}
+                      {job ? ` · ${job.name}` : ""}
+                      {stageLabel ? ` · ${stageLabel}` : ""}
                     </span>
                   </span>
 
@@ -178,11 +233,23 @@ export default function AdminClientsPanel({
                   </span>
 
                   <AdminIcon
-                    name="chevron-right"
+                    name={expanded ? "chevron-down" : "chevron-right"}
                     size={16}
                     className="admin-client-chevron"
                   />
                 </button>
+                </div>
+                {expanded ? (
+                  <AdminClientDetailModal
+                    embedded
+                    client={record}
+                    documentRecords={documentRecords}
+                    onClose={() => setSelectedClient(null)}
+                    onSaved={handleRefresh}
+                    onDeleted={handleRefresh}
+                    onDocumentsChanged={handleRefresh}
+                  />
+                ) : null}
               </li>
             );
           })}

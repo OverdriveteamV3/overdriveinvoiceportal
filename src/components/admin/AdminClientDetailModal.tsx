@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import AdminClientProfileUpload, {
   AdminClientAvatar,
 } from "@/components/admin/AdminClientProfileUpload";
@@ -9,6 +10,9 @@ import AdminBalanceBreakdownCard from "@/components/admin/AdminBalanceBreakdownC
 import AdminDocumentDetailModal from "@/components/admin/AdminDocumentDetailModal";
 import AdminInvoicePaymentPanel from "@/components/admin/AdminInvoicePaymentPanel";
 import AdminIcon from "@/components/admin/AdminIcons";
+import { adminViewPath } from "@/components/admin/admin-nav";
+import { formatCents } from "@/lib/crm/money";
+import { SALES_STAGE_LABELS, type SalesStage } from "@/lib/crm/stages";
 import {
   clientCatalogFromRecord,
   computeClientBalanceStats,
@@ -35,6 +39,7 @@ type AdminClientDetailModalProps = {
   onSaved: () => void | Promise<void>;
   onDeleted: () => void | Promise<void>;
   onDocumentsChanged?: () => void | Promise<void>;
+  embedded?: boolean;
 };
 
 function catalogToForm(record: StoredRecord): ClientFormData {
@@ -91,6 +96,116 @@ function statusClass(status: ClientDocumentRow["status"]): string {
 
 const DOC_GRID =
   "grid grid-cols-[4.5rem_5.5rem_minmax(0,1fr)_5.5rem_4.5rem_4.5rem] gap-2";
+
+const PIPELINE_SOURCES: Record<string, string> = {
+  website: "Website",
+  phone: "Phone",
+  referral: "Referral",
+  email: "Email",
+  social: "Social",
+  existing_client: "Client",
+  manual: "Manual",
+};
+
+type PipelineJob = {
+  id: string;
+  title: string;
+  stage: string;
+  source: string;
+  estimated_value_cents: number;
+  currency: string;
+  next_action: string;
+  follow_up_on: string | null;
+  updated_at: string;
+  clients?: { display_name?: string; company_name?: string; email?: string } | null;
+};
+
+function pipelineStageLabel(stage: string) {
+  return SALES_STAGE_LABELS[stage as SalesStage] ?? stage.replaceAll("_", " ");
+}
+
+function pipelineStatusClass(stage: string) {
+  if (stage === "closed_won") return "text-emerald-700";
+  if (stage === "closed_lost") return "text-rose-700";
+  if (stage === "quote_sent" || stage === "negotiation" || stage === "accepted_pending") {
+    return "text-blue-700";
+  }
+  return "text-amber-700";
+}
+
+function matchesPipelineClient(
+  job: PipelineJob,
+  catalog: { clientName: string; companyName: string; email: string }
+) {
+  const email = catalog.email.trim().toLowerCase();
+  const name = catalog.clientName.trim().toLowerCase();
+  const company = catalog.companyName.trim().toLowerCase();
+  const jobEmail = job.clients?.email?.trim().toLowerCase() ?? "";
+  const jobName = (job.clients?.display_name ?? "").trim().toLowerCase();
+  const jobCompany = (job.clients?.company_name ?? "").trim().toLowerCase();
+  if (email && jobEmail && email === jobEmail) return true;
+  if (name && (name === jobName || name === jobCompany)) return true;
+  if (company && (company === jobName || company === jobCompany)) return true;
+  return false;
+}
+
+function ClientPipelineTable({
+  jobs,
+  onOpen,
+}: {
+  jobs: PipelineJob[];
+  onOpen: (job: PipelineJob) => void;
+}) {
+  return (
+    <div className="overflow-hidden rounded-md border border-zinc-200">
+      <div
+        className={`${DOC_GRID} sticky top-0 border-b border-zinc-300 bg-zinc-100 px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-zinc-600`}
+      >
+        <span>Type</span>
+        <span>Source</span>
+        <span>Project</span>
+        <span className="text-right">Updated</span>
+        <span className="text-right">Estimate</span>
+        <span className="text-right">Status</span>
+      </div>
+      <div className="max-h-72 overflow-y-auto">
+        {jobs.length === 0 ? (
+          <p className="bg-white px-3 py-6 text-center text-xs text-zinc-500">
+            No pipeline projects linked to this client yet.
+          </p>
+        ) : (
+          jobs.map((job, index) => (
+            <button
+              key={job.id}
+              type="button"
+              onClick={() => onOpen(job)}
+              className={`${DOC_GRID} w-full cursor-pointer items-center border-b border-zinc-200 px-3 py-2 text-left text-xs transition last:border-b-0 hover:bg-blue-50/60 ${
+                index % 2 === 0 ? "bg-white" : "bg-zinc-50"
+              }`}
+            >
+              <span className="font-medium text-zinc-700">Lead</span>
+              <span className="truncate text-zinc-600">
+                {PIPELINE_SOURCES[job.source] ?? job.source}
+              </span>
+              <span className="truncate text-zinc-800">{job.title}</span>
+              <span className="truncate text-right tabular-nums text-zinc-500">
+                {formatDocDate(job.updated_at.slice(0, 10))}
+              </span>
+              <span className="text-right font-medium tabular-nums text-zinc-800">
+                {formatCents(job.estimated_value_cents, job.currency)}
+              </span>
+              <span
+                className={`truncate text-right text-[10px] font-semibold uppercase tracking-wide ${pipelineStatusClass(job.stage)}`}
+              >
+                {pipelineStageLabel(job.stage)}
+              </span>
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ClientDocumentsTable({
   documents,
@@ -164,6 +279,7 @@ export default function AdminClientDetailModal({
   onSaved,
   onDeleted,
   onDocumentsChanged,
+  embedded = false,
 }: AdminClientDetailModalProps) {
   const [mode, setMode] = useState<"view" | "edit">("view");
   const [form, setForm] = useState<ClientFormData>(EMPTY_CLIENT_FORM);
@@ -176,6 +292,8 @@ export default function AdminClientDetailModal({
   const [openingDocumentId, setOpeningDocumentId] = useState<string | null>(
     null
   );
+  const [pipelineJobs, setPipelineJobs] = useState<PipelineJob[]>([]);
+  const router = useRouter();
 
   const catalog = useMemo(
     () => (client ? clientCatalogFromRecord(client) : null),
@@ -200,6 +318,30 @@ export default function AdminClientDetailModal({
     if (!catalog) return [];
     return getClientDocuments(catalog, documentRecords, client);
   }, [catalog, documentRecords, client]);
+
+  useEffect(() => {
+    if (!client) {
+      setPipelineJobs([]);
+      return;
+    }
+    const current = clientCatalogFromRecord(client);
+    let cancelled = false;
+    fetch("/api/crm/opportunities")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => {
+        if (cancelled) return;
+        const jobs = ((body?.opportunities ?? []) as PipelineJob[]).filter((job) =>
+          matchesPipelineClient(job, current)
+        );
+        setPipelineJobs(jobs);
+      })
+      .catch(() => {
+        if (!cancelled) setPipelineJobs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
 
   useEffect(() => {
     if (!client) return;
@@ -319,7 +461,11 @@ export default function AdminClientDetailModal({
         },
       });
       await onSaved();
-      onClose();
+      if (embedded) {
+        setMode("view");
+      } else {
+        onClose();
+      }
     } catch {
       setError("Failed to save client. Please try again.");
     } finally {
@@ -349,31 +495,46 @@ export default function AdminClientDetailModal({
     }
   };
 
-  return (
-    <>
-    <AdminDocumentDetailModal
-      record={selectedDocument}
-      stacked
-      onClose={() => setSelectedDocument(null)}
-      onDeleted={async () => {
-        await handleDocumentChanged();
-        setSelectedDocument(null);
-      }}
-      onUpdated={handleDocumentChanged}
-    />
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={() => {
-        if (!saving && !deleting && !selectedDocument) onClose();
-      }}
-    >
+  const detail = (
       <div
-        role="dialog"
-        aria-modal="true"
+        role={embedded ? undefined : "dialog"}
+        aria-modal={embedded ? undefined : true}
         aria-labelledby="client-detail-title"
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl"
-        onClick={(event) => event.stopPropagation()}
+        className={
+          embedded
+            ? "border-t border-zinc-200 bg-white"
+            : "flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl"
+        }
       >
+        {embedded && mode === "view" ? (
+          <div className="flex items-center justify-end gap-1 px-4 py-2">
+            <h2 id="client-detail-title" className="sr-only">
+              {displayName}
+            </h2>
+            <button
+              type="button"
+              onClick={() => {
+                setForm(catalogToForm(client));
+                setMode("edit");
+                setError(null);
+              }}
+              className="rounded-lg p-2 text-zinc-400 transition hover:bg-zinc-200/60 hover:text-zinc-700"
+              aria-label="Edit client"
+              disabled={deleting}
+            >
+              <AdminIcon name="pencil" size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="rounded-lg p-2 text-zinc-400 transition hover:bg-red-50 hover:text-red-600"
+              aria-label="Delete client"
+              disabled={deleting}
+            >
+              <AdminIcon name="trash" size={16} />
+            </button>
+          </div>
+        ) : (
         <div className="border-b border-zinc-100 bg-zinc-50/80 px-6 py-5">
           <div className="flex items-start gap-3">
             {mode === "edit" ? (
@@ -448,21 +609,24 @@ export default function AdminClientDetailModal({
                   </button>
                 </>
               ) : null}
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-lg px-2 py-1.5 text-sm text-zinc-400 transition hover:bg-zinc-200/60 hover:text-zinc-700"
-                aria-label="Close"
-                disabled={saving || deleting}
-              >
-                ✕
-              </button>
+              {embedded ? null : (
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="rounded-lg px-2 py-1.5 text-sm text-zinc-400 transition hover:bg-zinc-200/60 hover:text-zinc-700"
+                  aria-label="Close"
+                  disabled={saving || deleting}
+                >
+                  ✕
+                </button>
+              )}
             </div>
           </div>
         </div>
+        )}
 
         {mode === "view" ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className={embedded ? "" : "min-h-0 flex-1 overflow-y-auto"}>
             <div className="space-y-5 px-6 py-5">
               <dl className="grid gap-3 text-sm">
               {catalog.email ? (
@@ -534,6 +698,21 @@ export default function AdminClientDetailModal({
             <div className="border-t border-zinc-200 bg-zinc-50/50 px-6 py-4">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  Pipeline
+                </h3>
+                <span className="text-[11px] tabular-nums text-zinc-400">
+                  {pipelineJobs.length} project{pipelineJobs.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <ClientPipelineTable
+                jobs={pipelineJobs}
+                onOpen={() => router.push(adminViewPath("pipeline", "clients"))}
+              />
+            </div>
+
+            <div className="border-t border-zinc-200 bg-zinc-50/50 px-6 py-4">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   Invoices & quotes
                 </h3>
                 <span className="text-[11px] tabular-nums text-zinc-400">
@@ -550,7 +729,11 @@ export default function AdminClientDetailModal({
         ) : (
           <form
             onSubmit={handleSave}
-            className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5"
+            className={
+              embedded
+                ? "space-y-4 px-6 py-5"
+                : "min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5"
+            }
           >
             <AdminClientProfileUpload
               value={form.profileImage}
@@ -666,7 +849,32 @@ export default function AdminClientDetailModal({
           </form>
         )}
       </div>
-    </div>
+  );
+
+  return (
+    <>
+    <AdminDocumentDetailModal
+      record={selectedDocument}
+      stacked
+      onClose={() => setSelectedDocument(null)}
+      onDeleted={async () => {
+        await handleDocumentChanged();
+        setSelectedDocument(null);
+      }}
+      onUpdated={handleDocumentChanged}
+    />
+    {embedded ? (
+      detail
+    ) : (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        onClick={() => {
+          if (!saving && !deleting && !selectedDocument) onClose();
+        }}
+      >
+        <div onClick={(event) => event.stopPropagation()}>{detail}</div>
+      </div>
+    )}
     </>
   );
 }

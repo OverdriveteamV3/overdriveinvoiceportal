@@ -1,4 +1,5 @@
 import type { DraftState } from "@/lib/drafts";
+import { getAdminSessionProfile } from "@/lib/admin-auth-server";
 import { buildPdfDownloadResponse, pdfDownloadResponseForToken } from "@/lib/invoice-pdf-download";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,10 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const profile = await getAdminSessionProfile();
+  if (!profile) {
+    return Response.json({ error: "Unauthorized." }, { status: 401 });
+  }
   let body: { state?: unknown };
   try {
     body = await request.json();

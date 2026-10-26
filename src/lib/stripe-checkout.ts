@@ -70,6 +70,36 @@ export async function createInvoicePaymentUrl(
   return session.url ?? null;
 }
 
+export async function createCrmCheckoutUrl(input: {
+  invoiceId: string;
+  documentNumber: string;
+  amountCents: number;
+  currency: string;
+  email?: string;
+}): Promise<string | null> {
+  if (!hasStripeConfig() || input.amountCents < 50) return null;
+  const stripe = getStripeClient();
+  const baseUrl = getPublicAppUrl();
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    customer_email: input.email?.trim() || undefined,
+    line_items: [
+      {
+        price_data: {
+          currency: input.currency,
+          product_data: { name: `Invoice ${input.documentNumber}` },
+          unit_amount: input.amountCents,
+        },
+        quantity: 1,
+      },
+    ],
+    metadata: { invoiceId: input.invoiceId },
+    success_url: `${baseUrl}/invoice/payment/success?session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/invoice/payment/cancelled`,
+  });
+  return session.url ?? null;
+}
+
 export function buildInvoicePaymentLink(
   state: DraftState,
   customerEmail: string

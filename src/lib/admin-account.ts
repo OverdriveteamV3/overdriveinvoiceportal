@@ -160,9 +160,8 @@ async function verifyCurrentPassword(
     if (db.masterAccount?.passwordHash) {
       return verifyAdminPassword(currentPassword, db.masterAccount.passwordHash);
     }
-    const envPassword =
-      process.env.ADMIN_PASSWORD?.trim() || "147896325";
-    if (currentPassword.length !== envPassword.length) return false;
+    const envPassword = process.env.ADMIN_PASSWORD?.trim() || "";
+    if (!envPassword || currentPassword.length !== envPassword.length) return false;
     let result = 0;
     for (let i = 0; i < currentPassword.length; i += 1) {
       result |= currentPassword.charCodeAt(i) ^ envPassword.charCodeAt(i);

@@ -322,6 +322,22 @@ body {
   @apply sticky top-0 z-50 border-b border-black/[0.06] bg-white/95 backdrop-blur-md;
 }
 
+.admin-header-brand {
+  @apply min-w-0;
+}
+
+.admin-header-brand h1 {
+  @apply mt-0.5 text-lg font-semibold tracking-tight text-zinc-900;
+}
+
+.admin-header-back {
+  @apply inline-flex items-center gap-1 text-[12px] font-semibold text-zinc-500 no-underline;
+}
+
+.admin-header-back:hover {
+  color: #0780f7;
+}
+
 .admin-header-menu-button {
   @apply inline-flex items-center gap-1.5 rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50;
 }
@@ -927,8 +943,20 @@ body {
   @apply bg-[#e8f0fe] ring-[#c6dafc];
 }
 
+.admin-client-card {
+  @apply overflow-hidden rounded-xl border border-zinc-200/80 bg-white shadow-sm;
+}
+
+.admin-client-card-open {
+  @apply border-zinc-300 shadow-md;
+}
+
 .admin-client-row {
   @apply relative flex w-full items-center gap-3 overflow-hidden rounded-xl border border-zinc-200/80 bg-white p-3 pr-3 text-left shadow-sm transition hover:border-zinc-300 hover:shadow-md sm:gap-4 sm:p-4;
+}
+
+.admin-client-row-inset {
+  @apply rounded-none border-0 shadow-none hover:border-0 hover:shadow-none;
 }
 
 .admin-client-avatar {

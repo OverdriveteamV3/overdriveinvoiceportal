@@ -14,8 +14,8 @@ import {
   verifyStoredAdminCredentials,
 } from "@/lib/admin-profiles";
 
-function getAdminPassword(): string {
-  return process.env.ADMIN_PASSWORD?.trim() || "147896325";
+function getAdminPassword(): string | null {
+  return process.env.ADMIN_PASSWORD?.trim() || null;
 }
 
 function safeEqual(a: string, b: string): boolean {
@@ -38,7 +38,9 @@ async function verifyMasterAdminCredentials(
     return verifyAdminPassword(password, storedHash);
   }
 
-  return safeEqual(password, getAdminPassword());
+  const envPassword = getAdminPassword();
+  if (!envPassword) return false;
+  return safeEqual(password, envPassword);
 }
 
 export async function getAdminSessionProfile(): Promise<AdminProfile | null> {

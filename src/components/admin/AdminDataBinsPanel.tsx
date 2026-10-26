@@ -15,15 +15,19 @@ import AdminSystemsApplicationsPanel from "@/components/admin/AdminSystemsApplic
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminIcon from "@/components/admin/AdminIcons";
 import AdminSidebar from "@/components/admin/AdminSidebar";
+import AdminCrmPanel from "@/components/admin/AdminCrmPanel";
 import {
   adminReturnHref,
   adminReturnLabel,
   adminViewPath,
+  CRM_NAV,
+  isCrmView,
   isDataBinView,
   isDocumentBin,
   parseAdminReturnFrom,
   type AdminReturnFrom,
   type AdminView,
+  type CrmView,
 } from "@/components/admin/admin-nav";
 import { activityIconName } from "@/lib/admin-icons";
 import type { AdminDashboardStats } from "@/lib/admin-dashboard";
@@ -200,12 +204,26 @@ export default function AdminDataBinsPanel({
     handleSelectIntegrations();
   };
 
+  const handleSelectCrm = (view: CrmView) => {
+    const origin: AdminReturnFrom | null =
+      activeView === view
+        ? returnFrom
+        : activeView === "home"
+          ? "dashboard"
+          : activeView;
+    setActiveView(view);
+    setExpandedId(null);
+    setSelectedDocument(null);
+    setMessage(null);
+    router.replace(adminViewPath(view, origin));
+  };
+
   const handleBackNavigation = () => {
     if (returnFrom) {
       router.push(adminReturnHref(returnFrom));
       return;
     }
-    handleSelectHome();
+    router.back();
   };
 
   const handleDelete = async (id: string) => {
@@ -277,16 +295,22 @@ export default function AdminDataBinsPanel({
     router.refresh();
   }, [loadBins, loadRecords, router, selectedBin]);
 
+  const crmNav = isCrmView(activeView)
+    ? CRM_NAV.find((item) => item.id === activeView)
+    : null;
+
   const mainTitle =
     activeView === "home" ? (
       "Dashboard"
     ) : activeView === "integrations" ? (
       "Integrations"
-    ) : (
+    ) : isDataBinView(activeView) ? (
       <span className="inline-flex items-center gap-2">
         <AdminIcon name={DATA_BINS[activeView].icon} size={18} />
         {DATA_BINS[activeView].label}
       </span>
+    ) : (
+      crmNav?.label ?? "Workspace"
     );
 
   const mainDescription =
@@ -294,7 +318,9 @@ export default function AdminDataBinsPanel({
       ? "Metrics, balances, and recent activity"
       : activeView === "integrations"
         ? "Email, payments, and cloud storage"
-        : DATA_BINS[activeView].description;
+        : isDataBinView(activeView)
+          ? DATA_BINS[activeView].description
+          : crmNav?.description ?? "";
 
   const showPanelHeader = activeView !== "home";
 
@@ -318,6 +344,7 @@ export default function AdminDataBinsPanel({
           onSelectHome: handleSelectHome,
           onSelectBin: handleSelectBinFromSidebar,
           onSelectIntegrations: handleSelectIntegrationsFromSidebar,
+          onSelectCrm: handleSelectCrm,
         }}
       />
 
@@ -328,20 +355,21 @@ export default function AdminDataBinsPanel({
           onSelectHome={handleSelectHome}
           onSelectBin={handleSelectBinFromSidebar}
           onSelectIntegrations={handleSelectIntegrationsFromSidebar}
+          onSelectCrm={handleSelectCrm}
         />
 
         <main className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
           {showPanelHeader && (
             <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div className="min-w-0">
-                {returnFrom ? (
+                {returnFrom || activeView === "pipeline" ? (
                   <button
                     type="button"
                     onClick={handleBackNavigation}
                     className="admin-back-button mb-2"
                   >
                     <AdminIcon name="chevron-left" size={14} />
-                    Back to {adminReturnLabel(returnFrom)}
+                    {returnFrom ? `Back to ${adminReturnLabel(returnFrom)}` : "Back"}
                   </button>
                 ) : null}
                 <h2 className="text-base font-semibold text-zinc-900">{mainTitle}</h2>
@@ -396,6 +424,8 @@ export default function AdminDataBinsPanel({
             />
           ) : activeView === "integrations" ? (
             <AdminIntegrationsPanel integrations={integrations} />
+          ) : isCrmView(activeView) ? (
+            <AdminCrmPanel view={activeView} />
           ) : (
             <div
               className={

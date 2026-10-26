@@ -416,15 +416,7 @@ export async function bulkUpsertRecords(
   }
 
   for (const docId of docIds) {
-    const incomingDoc = incomingIds.has(`doc-${docId}`);
     const incomingQuote = incomingIds.has(`quote-${docId}`);
-    if (incomingDoc) {
-      db.records = db.records.filter(
-        (record) =>
-          record.id !== `quote-${docId}` ||
-          !belongsToScope(record, scope)
-      );
-    }
     if (incomingQuote) {
       db.records = db.records.filter(
         (record) =>

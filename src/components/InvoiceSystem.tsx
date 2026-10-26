@@ -85,6 +85,7 @@ export default function InvoiceSystem() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const draftParam = searchParams.get("draft");
+  const opportunityId = searchParams.get("opportunity");
 
   const [initialDraft] = useState(() => {
     const opened = loadOpenedSubmission();
@@ -520,6 +521,26 @@ export default function InvoiceSystem() {
         currentDraftId
       );
       setCurrentDraftId(draftId);
+
+      if (savedToAdmin && opportunityId) {
+        const versionResponse = await fetch("/api/crm/quotes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            opportunityId,
+            state,
+            legacyRecordId: `quote-${draftId}`,
+          }),
+        });
+        if (!versionResponse.ok) {
+          const payload = await versionResponse.json().catch(() => ({}));
+          setToast({
+            message: payload.error || "Quote saved, but the CRM version was not created.",
+            type: "error",
+          });
+          return;
+        }
+      }
 
       if (savedToAdmin) {
         goToDashboard();

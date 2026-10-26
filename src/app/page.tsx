@@ -1,20 +1,20 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import {
-  ADMIN_SESSION_COOKIE,
-  verifyAdminSessionToken,
-} from "@/lib/admin-auth";
+import OverDriveHome from "@/components/home/OverDriveHome";
+import { getLocale } from "@/lib/get-locale";
 
-export const metadata = {
-  title: "Over Drive OS — Invoice & Quote System",
-  description: "Create professional quotes and invoices for your clients.",
-};
+export async function generateMetadata() {
+  const locale = await getLocale();
+  return locale === "es"
+    ? {
+        title: "Inicio | Over Drive",
+        description: "Sitios web, paneles, CRMs y software a medida de Over Drive.",
+      }
+    : {
+        title: "Home | Over Drive",
+        description: "Websites, dashboards, CRMs, and custom software from Over Drive.",
+      };
+}
 
 export default async function Home() {
-  const cookieStore = await cookies();
-  const profile = await verifyAdminSessionToken(
-    cookieStore.get(ADMIN_SESSION_COOKIE)?.value
-  );
-
-  redirect(profile ? "/admin" : "/admin/sign-in");
+  const locale = await getLocale();
+  return <OverDriveHome locale={locale} />;
 }
