@@ -182,6 +182,8 @@ export async function postVisitorMessage(input: {
     }
   }
 
+  if (!threadId) throw new Error("Could not start the chat.");
+
   return {
     online,
     name: nextName,
