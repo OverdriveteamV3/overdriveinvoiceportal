@@ -157,3 +157,70 @@ export async function authenticatePortalAccount(input: {
   }
   return { id: data.id as string };
 }
+
+export async function upsertPortalUserFromGoogle(input: {
+  email: string;
+  name: string;
+  sub: string;
+}): Promise<{ id: string } | { error: string }> {
+  const email = cleanEmail(input.email);
+  const name = (input.name.trim() || email.split("@")[0] || "Client").slice(0, 100);
+  const sub = input.sub.trim().slice(0, 200);
+  if (!validEmail(email) || !sub) return { error: "Google sign-in did not return a usable account." };
+
+  const supabase = crmClient();
+  const { data: bySub } = await supabase
+    .from("portal_users")
+    .select("id, name, email")
+    .eq("google_sub", sub)
+    .maybeSingle();
+  if (bySub?.id) {
+    await supabase
+      .from("portal_users")
+      .update({
+        name: bySub.name || name,
+        email,
+        auth_provider: "google",
+      })
+      .eq("id", bySub.id);
+    return { id: bySub.id as string };
+  }
+
+  const { data: matches } = await supabase
+    .from("portal_users")
+    .select("id, name, email")
+    .ilike("email", email)
+    .limit(8);
+  const existing = (matches ?? []).find((row) => String(row.email).toLowerCase() === email);
+  if (existing?.id) {
+    const { error } = await supabase
+      .from("portal_users")
+      .update({
+        google_sub: sub,
+        auth_provider: "google",
+        name: existing.name || name,
+      })
+      .eq("id", existing.id);
+    if (error) return { error: "We could not link that Google account. Try again." };
+    return { id: existing.id as string };
+  }
+
+  try {
+    const clientId = await clientIdForEmail(email, name);
+    const { data: created, error } = await supabase
+      .from("portal_users")
+      .insert({
+        client_id: clientId,
+        email,
+        name,
+        google_sub: sub,
+        auth_provider: "google",
+      })
+      .select("id")
+      .single();
+    if (error || !created) return { error: "We could not create that account. Try again." };
+    return { id: created.id as string };
+  } catch {
+    return { error: "We could not create that account. Try again." };
+  }
+}

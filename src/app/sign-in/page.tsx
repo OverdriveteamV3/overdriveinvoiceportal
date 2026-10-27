@@ -21,12 +21,19 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function SignInPage({
   searchParams,
 }: {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const nextPath = safeNextPath(params.next);
   const [userId, locale] = await Promise.all([getPortalUserId(), getLocale()]);
   if (userId) redirect(nextPath);
 
-  return <SignInForm nextPath={nextPath} initialMode={nextPath === "/quote" ? "up" : "in"} locale={locale} />;
+  return (
+    <SignInForm
+      nextPath={nextPath}
+      initialMode={nextPath === "/quote" ? "up" : "in"}
+      locale={locale}
+      authError={params.error ?? ""}
+    />
+  );
 }
