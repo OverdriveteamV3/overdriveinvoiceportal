@@ -1,12 +1,12 @@
 import { notFound, redirect } from "next/navigation";
+import PortalHeader from "@/components/portal/PortalHeader";
+import { submitPortalRevision } from "@/app/portal/projects/[id]/actions";
+import { getPortalAccount } from "@/lib/crm/portal-account";
 import { crmClient } from "@/lib/crm/db";
 import { formatCents } from "@/lib/crm/money";
 import { revisionMeter } from "@/lib/crm/revisions";
-import { getPortalUserId } from "@/lib/crm/portal-session";
 import { ONBOARDING_TEMPLATE, onboardingPercent, PROJECT_STAGE_LABELS, type ProjectStage } from "@/lib/crm/stages";
-import { submitPortalRevision } from "@/app/portal/projects/[id]/actions";
 import { getLocale } from "@/lib/get-locale";
-import LanguageToggle from "@/components/home/LanguageToggle";
 
 const STAGE_ES: Record<ProjectStage, string> = {
   awaiting_onboarding: "Esperando el inicio",
@@ -76,15 +76,15 @@ type Params = { params: Promise<{ id: string }> };
 
 export default async function PortalProjectPage({ params }: Params) {
   const { id } = await params;
-  const [userId, locale] = await Promise.all([getPortalUserId(), getLocale()]);
-  if (!userId) redirect("/portal");
+  const [account, locale] = await Promise.all([getPortalAccount(), getLocale()]);
+  if (!account) redirect("/sign-in?next=/portal");
   const es = locale === "es";
 
   const supabase = crmClient();
   const { data: membership } = await supabase
     .from("portal_memberships")
     .select("project_id")
-    .eq("portal_user_id", userId)
+    .eq("portal_user_id", account.id)
     .eq("project_id", id)
     .maybeSingle();
   if (!membership) notFound();
@@ -138,18 +138,20 @@ export default async function PortalProjectPage({ params }: Params) {
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl space-y-8 px-6 py-10">
-      <div>
-        <div className="flex items-start justify-between gap-4">
-          <a href="/portal" className="text-sm text-zinc-500">{es ? "Todos los proyectos" : "All projects"}</a>
-          <LanguageToggle locale={locale} />
-        </div>
-        <h1 className="mt-2 text-2xl font-semibold text-zinc-900">{project.name}</h1>
-        <p className="mt-1 text-sm text-zinc-600">
-          {stage}
-          {project.next_action ? ` · ${es ? "Siguiente" : "Next"}: ${project.next_action}` : ""}
-          {project.next_action_due ? ` · ${es ? "Vence" : "Due"} ${project.next_action_due}` : ""}
-        </p>
-      </div>
+      <PortalHeader
+        locale={locale}
+        account={account}
+        title={project.name}
+        subtitle={[
+          stage,
+          project.next_action ? `${es ? "Siguiente" : "Next"}: ${project.next_action}` : "",
+          project.next_action_due ? `${es ? "Vence" : "Due"} ${project.next_action_due}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+        backHref="/portal"
+        backLabel={es ? "Todos los proyectos" : "All projects"}
+      />
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
         <h2 className="text-sm font-semibold text-zinc-900">{es ? "Inicio" : "Onboarding"}</h2>

@@ -6,6 +6,7 @@ export type PortalAccount = {
   id: string;
   name: string;
   email: string;
+  avatarUrl: string | null;
 };
 
 function hashPassword(password: string): string {
@@ -46,11 +47,15 @@ export async function getPortalAccount(): Promise<PortalAccount | null> {
   try {
     const { data } = await crmClient()
       .from("portal_users")
-      .select("id, name, email")
+      .select("id, name, email, avatar_url")
       .eq("id", id)
       .maybeSingle();
     if (!data?.id || !data.email) return null;
-    return { id: data.id, name: data.name ?? "", email: data.email };
+    const avatar =
+      typeof data.avatar_url === "string" && data.avatar_url.startsWith("https://")
+        ? data.avatar_url
+        : null;
+    return { id: data.id, name: data.name ?? "", email: data.email, avatarUrl: avatar };
   } catch {
     return null;
   }
@@ -158,14 +163,22 @@ export async function authenticatePortalAccount(input: {
   return { id: data.id as string };
 }
 
+function cleanAvatarUrl(value: string | undefined): string | null {
+  const url = value?.trim() ?? "";
+  if (!url.startsWith("https://")) return null;
+  return url.slice(0, 500);
+}
+
 export async function upsertPortalUserFromGoogle(input: {
   email: string;
   name: string;
   sub: string;
+  avatarUrl?: string;
 }): Promise<{ id: string } | { error: string }> {
   const email = cleanEmail(input.email);
   const name = (input.name.trim() || email.split("@")[0] || "Client").slice(0, 100);
   const sub = input.sub.trim().slice(0, 200);
+  const avatarUrl = cleanAvatarUrl(input.avatarUrl);
   if (!validEmail(email) || !sub) return { error: "Google sign-in did not return a usable account." };
 
   const supabase = crmClient();
@@ -181,6 +194,7 @@ export async function upsertPortalUserFromGoogle(input: {
         name: bySub.name || name,
         email,
         auth_provider: "google",
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       })
       .eq("id", bySub.id);
     return { id: bySub.id as string };
@@ -199,6 +213,7 @@ export async function upsertPortalUserFromGoogle(input: {
         google_sub: sub,
         auth_provider: "google",
         name: existing.name || name,
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       })
       .eq("id", existing.id);
     if (error) return { error: "We could not link that Google account. Try again." };
@@ -215,6 +230,7 @@ export async function upsertPortalUserFromGoogle(input: {
         name,
         google_sub: sub,
         auth_provider: "google",
+        ...(avatarUrl ? { avatar_url: avatarUrl } : {}),
       })
       .select("id")
       .single();

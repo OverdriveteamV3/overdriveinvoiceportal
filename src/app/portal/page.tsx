@@ -1,9 +1,10 @@
 import Link from "next/link";
+import PortalHeader from "@/components/portal/PortalHeader";
+import LanguageToggle from "@/components/home/LanguageToggle";
+import { getPortalAccount } from "@/lib/crm/portal-account";
 import { crmClient } from "@/lib/crm/db";
-import { getPortalUserId } from "@/lib/crm/portal-session";
 import { PROJECT_STAGE_LABELS, type ProjectStage } from "@/lib/crm/stages";
 import { getLocale } from "@/lib/get-locale";
-import LanguageToggle from "@/components/home/LanguageToggle";
 
 const STAGE_ES: Record<ProjectStage, string> = {
   awaiting_onboarding: "Esperando el inicio",
@@ -33,13 +34,19 @@ export default async function PortalHome({
   searchParams: Promise<{ error?: string }>;
 }) {
   const { error } = await searchParams;
-  const [userId, locale] = await Promise.all([getPortalUserId(), getLocale()]);
+  const [account, locale] = await Promise.all([getPortalAccount(), getLocale()]);
   const es = locale === "es";
-  if (!userId) {
+  if (!account) {
     return (
       <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6">
-        <div className="mb-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <LanguageToggle locale={locale} />
+          <Link
+            href="/"
+            className="rounded-md bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-zinc-800"
+          >
+            {es ? "Volver al inicio" : "Back to Home"}
+          </Link>
         </div>
         <h1 className="text-2xl font-semibold text-zinc-900">{es ? "Portal de clientes" : "Client portal"}</h1>
         <p className="mt-2 text-sm text-zinc-600">
@@ -51,6 +58,11 @@ export default async function PortalHome({
               ? "Usa el enlace de invitación de tu correo para abrir tus proyectos."
               : "Use the invite link from your email to open your projects."}
         </p>
+        <p className="mt-4">
+          <Link href="/sign-in?next=/portal" className="text-sm font-medium text-zinc-900 underline">
+            {es ? "Entrar" : "Sign in"}
+          </Link>
+        </p>
       </main>
     );
   }
@@ -59,7 +71,7 @@ export default async function PortalHome({
   const { data: memberships } = await supabase
     .from("portal_memberships")
     .select("project_id, projects(id, name, stage, next_action)")
-    .eq("portal_user_id", userId);
+    .eq("portal_user_id", account.id);
 
   const projects = (memberships ?? []).flatMap((row) => {
     const linked = (row as { projects?: unknown }).projects;
@@ -78,13 +90,12 @@ export default async function PortalHome({
 
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-10">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-zinc-400">Over Drive</p>
-          <h1 className="mt-2 text-2xl font-semibold text-zinc-900">{es ? "Tus proyectos" : "Your projects"}</h1>
-        </div>
-        <LanguageToggle locale={locale} />
-      </div>
+      <PortalHeader
+        locale={locale}
+        account={account}
+        title={es ? "Tus proyectos" : "Your projects"}
+        compactProfile
+      />
       {projects.length === 0 ? (
         <p className="mt-6 text-sm text-zinc-600">
           {es ? "Todavía no hay proyectos asignados a esta cuenta." : "No projects are assigned to this login yet."}

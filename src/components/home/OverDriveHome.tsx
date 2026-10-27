@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import LanguageToggle from "@/components/home/LanguageToggle";
+import AccountMenu from "@/components/portal/AccountMenu";
 import { homeCopy, type HomeCopy } from "@/lib/home-copy";
 import type { Locale } from "@/lib/locale";
 
@@ -356,7 +357,13 @@ function FooterSocial() {
   );
 }
 
-export default function OverDriveHome({ locale = "en" }: { locale?: Locale }) {
+export default function OverDriveHome({
+  locale = "en",
+  account = null,
+}: {
+  locale?: Locale;
+  account?: { name: string; email: string; avatarUrl: string | null } | null;
+}) {
   const copy = homeCopy(locale);
   const services = copy.services;
   const steps = copy.steps;
@@ -445,12 +452,23 @@ export default function OverDriveHome({ locale = "en" }: { locale?: Locale }) {
 
           <div className="od-header-actions">
             <LanguageToggle locale={locale} />
-            <Link href="/sign-in?next=/portal" className="od-text-button">
-              {copy.headerSignIn}
-            </Link>
-            <Link href="/sign-in?next=/quote" className="od-button">
-              {copy.headerStart}
-            </Link>
+            {account ? (
+              <AccountMenu
+                locale={locale}
+                name={account.name}
+                email={account.email}
+                avatarUrl={account.avatarUrl}
+              />
+            ) : (
+              <>
+                <Link href="/sign-in?next=/portal" className="od-text-button">
+                  {copy.headerSignIn}
+                </Link>
+                <Link href="/sign-in?next=/quote" className="od-button">
+                  {copy.headerStart}
+                </Link>
+              </>
+            )}
           </div>
 
           <button
@@ -473,13 +491,26 @@ export default function OverDriveHome({ locale = "en" }: { locale?: Locale }) {
 
             <LanguageToggle locale={locale} />
 
-            <Link href="/sign-in?next=/portal" className="od-text-button" onClick={() => setMenuOpen(false)}>
-              {copy.signIn}
-            </Link>
+            {account ? (
+              <div className="od-mobile-account" onClick={() => setMenuOpen(false)}>
+                <AccountMenu
+                  locale={locale}
+                  name={account.name}
+                  email={account.email}
+                  avatarUrl={account.avatarUrl}
+                />
+              </div>
+            ) : (
+              <>
+                <Link href="/sign-in?next=/portal" className="od-text-button" onClick={() => setMenuOpen(false)}>
+                  {copy.signIn}
+                </Link>
 
-            <Link href="/sign-in?next=/quote" className="od-button" onClick={() => setMenuOpen(false)}>
-              {copy.startProject}
-            </Link>
+                <Link href="/sign-in?next=/quote" className="od-button" onClick={() => setMenuOpen(false)}>
+                  {copy.startProject}
+                </Link>
+              </>
+            )}
           </nav>
         )}
         </div>

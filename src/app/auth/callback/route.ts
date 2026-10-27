@@ -64,6 +64,10 @@ export async function GET(request: NextRequest) {
     (typeof data.user.user_metadata?.full_name === "string" && data.user.user_metadata.full_name) ||
     (typeof data.user.user_metadata?.name === "string" && data.user.user_metadata.name) ||
     "";
+  const avatarUrl =
+    (typeof data.user.user_metadata?.avatar_url === "string" && data.user.user_metadata.avatar_url) ||
+    (typeof data.user.user_metadata?.picture === "string" && data.user.user_metadata.picture) ||
+    "";
   const identities = data.user.identities ?? [];
   const googleIdentity = identities.find((identity) => identity.provider === "google");
   const sub =
@@ -71,7 +75,7 @@ export async function GET(request: NextRequest) {
     (typeof data.user.user_metadata?.sub === "string" && data.user.user_metadata.sub) ||
     data.user.id;
 
-  const result = await upsertPortalUserFromGoogle({ email, name, sub });
+  const result = await upsertPortalUserFromGoogle({ email, name, sub, avatarUrl });
   if ("error" in result) {
     console.error("[auth/callback] upsertPortalUserFromGoogle", result.error);
     return fail("google_account");

@@ -1,4 +1,5 @@
 import OverDriveHome from "@/components/home/OverDriveHome";
+import { getPortalAccount } from "@/lib/crm/portal-account";
 import { getLocale } from "@/lib/get-locale";
 
 export async function generateMetadata() {
@@ -15,6 +16,15 @@ export async function generateMetadata() {
 }
 
 export default async function Home() {
-  const locale = await getLocale();
-  return <OverDriveHome locale={locale} />;
+  const [locale, account] = await Promise.all([getLocale(), getPortalAccount()]);
+  return (
+    <OverDriveHome
+      locale={locale}
+      account={
+        account
+          ? { name: account.name, email: account.email, avatarUrl: account.avatarUrl }
+          : null
+      }
+    />
+  );
 }
