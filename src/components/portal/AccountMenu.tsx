@@ -91,7 +91,7 @@ export default function AccountMenu({ locale, name, email, avatarUrl, className 
           id={menuId}
           role="menu"
           className={`absolute z-40 min-w-[200px] rounded-xl border border-zinc-200 bg-white p-2 shadow-[0_12px_30px_rgba(24,24,27,0.12)] ${
-            navStyle ? "left-0 right-0 top-[calc(100%+8px)]" : "right-0 top-[calc(100%+8px)]"
+            navStyle ? "od-portal-account-menu" : "right-0 top-[calc(100%+8px)]"
           }`}
         >
           <p className="truncate border-b border-zinc-100 px-2.5 pb-2.5 pt-2 text-[13px] font-semibold text-zinc-900">

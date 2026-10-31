@@ -21,6 +21,7 @@ export type PortalInvoiceSummary = {
 export type PortalProjectCard = {
   id: string;
   name: string;
+  createdAt: string;
   stage: ProjectStage | string;
   nextAction: string;
   nextActionDue: string | null;
@@ -71,6 +72,7 @@ export const UI_DEMO_PROJECTS: PortalProjectCard[] = [
   {
     id: "demo-ui-harbor",
     name: `${DEMO_PROJECT_NAME_PREFIX} Harbor Studio Website`,
+    createdAt: "2026-09-08",
     stage: "development",
     nextAction: "Approve homepage copy",
     nextActionDue: null,
@@ -118,6 +120,7 @@ export const UI_DEMO_PROJECTS: PortalProjectCard[] = [
   {
     id: "demo-ui-northline",
     name: `${DEMO_PROJECT_NAME_PREFIX} Northline CRM`,
+    createdAt: "2026-07-21",
     stage: "client_review",
     nextAction: "Review dashboard prototype",
     nextActionDue: new Date(Date.now() + 3 * 86400000).toISOString().slice(0, 10),
@@ -174,6 +177,7 @@ export const UI_DEMO_PROJECTS: PortalProjectCard[] = [
   {
     id: "demo-ui-orbit",
     name: `${DEMO_PROJECT_NAME_PREFIX} Orbit Brand Kit`,
+    createdAt: "2026-10-18",
     stage: "awaiting_onboarding",
     nextAction: "Upload logo files",
     nextActionDue: new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10),
@@ -215,6 +219,7 @@ export const UI_HISTORY_PROJECTS: PortalProjectCard[] = [
   {
     id: "demo-hist-lumen",
     name: `${DEMO_PROJECT_NAME_PREFIX} Lumen Landing Page`,
+    createdAt: "2026-03-04",
     stage: "delivered",
     nextAction: "",
     nextActionDue: null,
@@ -262,6 +267,7 @@ export const UI_HISTORY_PROJECTS: PortalProjectCard[] = [
   {
     id: "demo-hist-cascade",
     name: `${DEMO_PROJECT_NAME_PREFIX} Cascade Brand Refresh`,
+    createdAt: "2026-01-16",
     stage: "delivered",
     nextAction: "",
     nextActionDue: null,

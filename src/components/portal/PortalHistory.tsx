@@ -30,6 +30,75 @@ type Props = {
   projects: PortalProjectCard[];
 };
 
+type JobRow = {
+  id: string;
+  name: string;
+  demo: boolean;
+  stage: string;
+  primary: string;
+  secondary: string;
+  href: string | null;
+};
+
+function JobList({
+  title,
+  empty,
+  columns,
+  rows,
+}: {
+  title: string;
+  empty: string;
+  columns: { project: string; stage: string; primary: string; secondary: string };
+  rows: JobRow[];
+}) {
+  return (
+    <section className="od-history-panel">
+      <header className="od-history-panel-head">
+        <h2>{title}</h2>
+        <span>{rows.length}</span>
+      </header>
+      {rows.length === 0 ? (
+        <p className="od-history-empty">{empty}</p>
+      ) : (
+        <>
+          <div className="od-history-line od-history-line-label" aria-hidden="true">
+            <span>{columns.project}</span>
+            <span>{columns.stage}</span>
+            <span>{columns.primary}</span>
+            <span>{columns.secondary}</span>
+          </div>
+          <ul className="od-history-rows">
+            {rows.map((row) => {
+              const body = (
+                <>
+                  <span className="od-history-name">
+                    <span>{row.name}</span>
+                    {row.demo ? <em className="od-history-demo">Demo</em> : null}
+                  </span>
+                  <span className="od-history-stage">{row.stage}</span>
+                  <span className="od-history-money">{row.primary}</span>
+                  <span className="od-history-money">{row.secondary}</span>
+                </>
+              );
+              return (
+                <li key={row.id}>
+                  {row.href ? (
+                    <Link className="od-history-line" href={row.href}>
+                      {body}
+                    </Link>
+                  ) : (
+                    <div className="od-history-line">{body}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function PortalHistory({ locale, projects }: Props) {
   const es = locale === "es";
   const current = projects.filter(isCurrentProject);
@@ -38,6 +107,9 @@ export default function PortalHistory({ locale, projects }: Props) {
   const totalBilled = projects.reduce((sum, project) => sum + project.orderTotalCents, 0);
   const totalPaid = projects.reduce((sum, project) => sum + project.paidCents, 0);
   const totalBalance = projects.reduce((sum, project) => sum + project.balanceCents, 0);
+  const moneyTotal = Math.max(totalBilled, totalPaid + totalBalance);
+  const collectedPct = moneyTotal > 0 ? (totalPaid / moneyTotal) * 100 : 0;
+  const openPct = moneyTotal > 0 ? (totalBalance / moneyTotal) * 100 : 0;
 
   function stageLabel(stage: string) {
     return (es ? STAGE_ES[stage] : PROJECT_STAGE_LABELS[stage as ProjectStage]) ?? stage;
@@ -50,110 +122,84 @@ export default function PortalHistory({ locale, projects }: Props) {
   return (
     <div className="od-history">
       <section className="od-history-summary" aria-label={es ? "Totales" : "Totals"}>
-        <div>
-          <span>{es ? "Facturado" : "Billed"}</span>
-          <strong>{formatCents(totalBilled)}</strong>
-        </div>
-        <div>
-          <span>{es ? "Cobrado" : "Collected"}</span>
-          <strong>{formatCents(totalPaid)}</strong>
-        </div>
-        <div>
-          <span>{es ? "Saldo abierto" : "Open balance"}</span>
-          <strong>{formatCents(totalBalance)}</strong>
-        </div>
-        <div>
-          <span>{es ? "Completados" : "Completed"}</span>
-          <strong>{completed.length}</strong>
+        <div className="od-history-meter">
+          <header className="od-history-meter-head">
+            <div>
+              <span>{es ? "Facturado" : "Billed"}</span>
+              <strong>{formatCents(totalBilled)}</strong>
+            </div>
+            <div className="od-history-meter-done">
+              <i className="is-done" aria-hidden="true" />
+              <span>{es ? "Completados" : "Completed"}</span>
+              <strong>{completed.length}</strong>
+            </div>
+          </header>
+          <div
+            className="od-history-meter-track"
+            role="img"
+            aria-label={
+              es
+                ? `${formatCents(totalPaid)} cobrado, ${formatCents(totalBalance)} abierto`
+                : `${formatCents(totalPaid)} collected, ${formatCents(totalBalance)} open`
+            }
+          >
+            <span className="is-collected" style={{ width: `${collectedPct}%` }} />
+            <span className="is-open" style={{ width: `${openPct}%` }} />
+          </div>
+          <ul className="od-history-meter-legend">
+            <li>
+              <i className="is-collected" aria-hidden="true" />
+              <span>{es ? "Cobrado" : "Collected"}</span>
+              <strong>{formatCents(totalPaid)}</strong>
+            </li>
+            <li>
+              <i className="is-open" aria-hidden="true" />
+              <span>{es ? "Saldo abierto" : "Open balance"}</span>
+              <strong>{formatCents(totalBalance)}</strong>
+            </li>
+          </ul>
         </div>
       </section>
 
       <div className="od-history-grid">
-        <section className="od-history-panel">
-          <header>
-            <h2>{es ? "Trabajos actuales" : "Current jobs"}</h2>
-            <p>{es ? "Engagements en curso" : "Engagements in progress"}</p>
-          </header>
-          {current.length === 0 ? (
-            <p className="od-history-empty">{es ? "No hay trabajos actuales." : "No current jobs."}</p>
-          ) : (
-            <table className="od-history-table">
-              <thead>
-                <tr>
-                  <th>{es ? "Proyecto" : "Project"}</th>
-                  <th>{es ? "Estado" : "Stage"}</th>
-                  <th>{es ? "Precio" : "Price"}</th>
-                  <th>{es ? "Saldo" : "Balance"}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {current.map((project) => (
-                  <tr key={project.id}>
-                    <td>
-                      {cleanName(project.name)}
-                      {project.demo ? <em className="od-history-demo">Demo</em> : null}
-                    </td>
-                    <td>{stageLabel(String(project.stage))}</td>
-                    <td>{formatCents(project.orderTotalCents, project.currency)}</td>
-                    <td>{formatCents(project.balanceCents, project.currency)}</td>
-                    <td>
-                      {project.href ? (
-                        <Link href={project.href}>{es ? "Ver" : "View"}</Link>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-
-        <section className="od-history-panel">
-          <header>
-            <h2>{es ? "Trabajos completados" : "Completed jobs"}</h2>
-            <p>{es ? "Entregas cerradas" : "Past delivered work"}</p>
-          </header>
-          {completed.length === 0 ? (
-            <p className="od-history-empty">
-              {es ? "Todavía no hay trabajos completados." : "No completed jobs yet."}
-            </p>
-          ) : (
-            <table className="od-history-table">
-              <thead>
-                <tr>
-                  <th>{es ? "Proyecto" : "Project"}</th>
-                  <th>{es ? "Estado" : "Stage"}</th>
-                  <th>{es ? "Total" : "Total"}</th>
-                  <th>{es ? "Pagado" : "Paid"}</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {completed.map((project) => (
-                  <tr key={project.id}>
-                    <td>
-                      {cleanName(project.name)}
-                      {project.demo ? <em className="od-history-demo">Demo</em> : null}
-                    </td>
-                    <td>{stageLabel(String(project.stage))}</td>
-                    <td>{formatCents(project.orderTotalCents, project.currency)}</td>
-                    <td>{formatCents(project.paidCents, project.currency)}</td>
-                    <td>
-                      {project.href ? (
-                        <Link href={project.href}>{es ? "Ver" : "View"}</Link>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
+        <JobList
+          title={es ? "Trabajos actuales" : "Current jobs"}
+          empty={es ? "No hay trabajos actuales." : "No current jobs."}
+          columns={{
+            project: es ? "Proyecto" : "Project",
+            stage: es ? "Estado" : "Stage",
+            primary: es ? "Precio" : "Price",
+            secondary: es ? "Saldo" : "Balance",
+          }}
+          rows={current.map((project) => ({
+            id: project.id,
+            name: cleanName(project.name),
+            demo: project.demo,
+            stage: stageLabel(String(project.stage)),
+            primary: formatCents(project.orderTotalCents, project.currency),
+            secondary: formatCents(project.balanceCents, project.currency),
+            href: project.href,
+          }))}
+        />
+        <JobList
+          title={es ? "Trabajos completados" : "Completed jobs"}
+          empty={es ? "Todavía no hay trabajos completados." : "No completed jobs yet."}
+          columns={{
+            project: es ? "Proyecto" : "Project",
+            stage: es ? "Estado" : "Stage",
+            primary: es ? "Total" : "Total",
+            secondary: es ? "Pagado" : "Paid",
+          }}
+          rows={completed.map((project) => ({
+            id: project.id,
+            name: cleanName(project.name),
+            demo: project.demo,
+            stage: stageLabel(String(project.stage)),
+            primary: formatCents(project.orderTotalCents, project.currency),
+            secondary: formatCents(project.paidCents, project.currency),
+            href: project.href,
+          }))}
+        />
       </div>
 
       <section className="od-history-panel">

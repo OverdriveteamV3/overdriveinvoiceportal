@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import AccountMenu from "@/components/portal/AccountMenu";
 import LanguageToggle from "@/components/home/LanguageToggle";
-import PortalSettingsForm from "@/components/portal/PortalSettingsForm";
+import PortalSettings from "@/components/portal/settings/PortalSettings";
 import { getPortalAccount } from "@/lib/crm/portal-account";
 import { getLocale } from "@/lib/get-locale";
 import "@/components/portal/portal-dashboard.css";
@@ -14,13 +14,21 @@ export async function generateMetadata() {
   };
 }
 
-export default async function PortalSettingsPage() {
-  const [account, locale] = await Promise.all([getPortalAccount(), getLocale()]);
+export default async function PortalSettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ notice?: string }>;
+}) {
+  const [{ notice }, account, locale] = await Promise.all([
+    searchParams,
+    getPortalAccount(),
+    getLocale(),
+  ]);
   if (!account) redirect("/sign-in?next=/portal/settings");
   const es = locale === "es";
 
   return (
-    <div className="od-portal">
+    <div className="od-portal od-portal-settings" data-theme="light">
       <div className="od-portal-shell">
         <aside className="od-portal-nav">
           <div className="od-portal-brand-row">
@@ -37,7 +45,7 @@ export default async function PortalSettingsPage() {
             </Link>
           </div>
 
-          <nav className="od-portal-nav-list" aria-label={es ? "Portal" : "Portal"}>
+          <nav className="od-portal-nav-list" aria-label="Portal">
             <Link href="/portal">{es ? "Proyectos" : "Projects"}</Link>
             <Link href="/quote" className="od-portal-start">
               {es ? "Iniciar un proyecto" : "Start a Project"}
@@ -52,7 +60,6 @@ export default async function PortalSettingsPage() {
               avatarUrl={account.avatarUrl}
               className="od-portal-account"
             />
-
             <Link href="/" className="od-portal-home">
               {es ? "Volver al sitio" : "Back to website"}
             </Link>
@@ -63,25 +70,33 @@ export default async function PortalSettingsPage() {
           <div className="od-portal-topbar">
             <LanguageToggle locale={locale} />
           </div>
-          <header className="od-portal-hero" style={{ gridTemplateColumns: "1fr" }}>
-            <div>
-              <h1>{es ? "Ajustes." : "Settings."}</h1>
-              <p>
-                {es
-                  ? "Actualiza cómo aparece tu cuenta en el portal."
-                  : "Update how your account appears in the portal."}
-              </p>
-            </div>
-          </header>
-
-          <section className="od-portal-panel" style={{ maxWidth: 560 }}>
-            <PortalSettingsForm
-              locale={locale}
-              name={account.name}
-              email={account.email}
-              avatarUrl={account.avatarUrl}
-            />
-          </section>
+          <PortalSettings
+            locale={locale}
+            notice={notice}
+            account={{
+              name: account.name,
+              email: account.email,
+              avatarUrl: account.avatarUrl,
+              phone: account.phone,
+              businessName: account.businessName,
+              hasPassword: account.hasPassword,
+              pendingEmail: account.pendingEmail,
+              secondaryEmail: account.secondaryEmail,
+              secondaryEmailVerified: account.secondaryEmailVerified,
+              preferences: account.preferences,
+              billingContactName: account.billingContactName,
+              billingBusinessName: account.billingBusinessName,
+              billingEmail: account.billingEmail,
+              billingCountry: account.billingCountry,
+              billingAddress: account.billingAddress,
+              billingAddressLine1: account.billingAddressLine1,
+              billingAddressLine2: account.billingAddressLine2,
+              billingCity: account.billingCity,
+              billingState: account.billingState,
+              billingPostalCode: account.billingPostalCode,
+              deletionRequestedAt: account.deletionRequestedAt,
+            }}
+          />
         </div>
       </div>
     </div>

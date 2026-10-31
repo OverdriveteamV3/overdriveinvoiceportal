@@ -83,6 +83,67 @@ export function readPortalResetToken(
   }
 }
 
+export type PortalMailKind = "portal-email" | "portal-secondary";
+
+export function createPortalMailToken(
+  portalUserId: string,
+  email: string,
+  kind: PortalMailKind
+): string {
+  const body = Buffer.from(
+    JSON.stringify({
+      u: portalUserId,
+      m: email.trim().toLowerCase(),
+      e: Date.now() + PORTAL_RESET_TTL_MS,
+      k: kind,
+    })
+  ).toString("base64url");
+  const signature = createHmac("sha256", sessionSecret()).update(body).digest("base64url");
+  return `${body}.${signature}`;
+}
+
+export function readPortalMailToken(
+  token: string | undefined
+): { portalUserId: string; email: string; kind: PortalMailKind } | null {
+  if (!token) return null;
+  const dot = token.lastIndexOf(".");
+  if (dot <= 0) return null;
+  const body = token.slice(0, dot);
+  const signature = token.slice(dot + 1);
+  const expected = createHmac("sha256", sessionSecret()).update(body).digest("base64url");
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  if (left.length !== right.length || !timingSafeEqual(left, right)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as {
+      u?: string;
+      m?: string;
+      e?: number;
+      k?: string;
+    };
+    if (
+      (payload.k !== "portal-email" && payload.k !== "portal-secondary") ||
+      !payload.u ||
+      !payload.m ||
+      !payload.e ||
+      payload.e < Date.now()
+    ) {
+      return null;
+    }
+    return { portalUserId: payload.u, email: payload.m, kind: payload.k };
+  } catch {
+    return null;
+  }
+}
+
+export function portalPublicBase(): string {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/$/, "");
+  if (configured) return configured;
+  const vercel = process.env.VERCEL_URL?.trim();
+  if (vercel) return `https://${vercel}`;
+  return "http://localhost:3000";
+}
+
 export function readPortalUserId(token: string | undefined): string | null {
   if (!token) return null;
   const dot = token.lastIndexOf(".");

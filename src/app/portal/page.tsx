@@ -20,6 +20,7 @@ export async function generateMetadata() {
 type ProjectRow = {
   id: string;
   name?: string;
+  created_at?: string;
   stage?: string;
   next_action?: string | null;
   next_action_due?: string | null;
@@ -82,6 +83,7 @@ function mapProject(row: ProjectRow): PortalProjectCard {
   return {
     id: row.id,
     name,
+    createdAt: row.created_at ?? "",
     stage: row.stage ?? "awaiting_onboarding",
     nextAction: row.next_action ?? "",
     nextActionDue: row.next_action_due ?? null,
@@ -149,7 +151,7 @@ export default async function PortalHome({
   const { data: memberships } = await supabase
     .from("portal_memberships")
     .select(
-      "project_id, projects(id, name, stage, next_action, next_action_due, revision_allowance, rounds_used, order_id, onboarding_items(label, required, state), orders(id, document_number, total_cents, currency, invoices(id, document_number, kind, status, total_cents, currency)))"
+      "project_id, projects(id, name, created_at, stage, next_action, next_action_due, revision_allowance, rounds_used, order_id, onboarding_items(label, required, state), orders(id, document_number, total_cents, currency, invoices(id, document_number, kind, status, total_cents, currency)))"
     )
     .eq("portal_user_id", account.id);
 

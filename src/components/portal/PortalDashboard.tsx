@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type CSSProperties } from "react";
 import AccountMenu from "@/components/portal/AccountMenu";
 import LanguageToggle from "@/components/home/LanguageToggle";
 import PortalHistory from "@/components/portal/PortalHistory";
@@ -85,12 +85,32 @@ export default function PortalDashboard({
         ).length
       );
     }, 0);
+    const checklistTotal = overviewProjects.reduce((count, project) => {
+      return count + project.onboardingItems.filter((item) => item.required).length;
+    }, 0);
     const updatesLeft = overviewProjects.reduce((sum, project) => {
       return sum + Math.max(0, project.revisionAllowance - project.roundsUsed);
     }, 0);
     const openBalance = overviewProjects.reduce((sum, project) => sum + project.balanceCents, 0);
+    const billed = overviewProjects.reduce((sum, project) => sum + project.orderTotalCents, 0);
     const completed = historyProjects.filter(isCompletedProject).length;
-    return { active, needsYou, updatesLeft, openBalance, completed };
+    const jobTotal = active + completed;
+    const share = (part: number, total: number) =>
+      total > 0 ? Math.max(0, Math.min(100, Math.round((part / total) * 100))) : 0;
+    return {
+      active,
+      needsYou,
+      updatesLeft,
+      openBalance,
+      completed,
+      jobTotal,
+      checklistTotal,
+      billed,
+      activeShare: share(active, jobTotal),
+      actionShare: share(needsYou, checklistTotal),
+      balanceShare: share(openBalance, billed),
+      completedShare: share(completed, jobTotal),
+    };
   }, [overviewProjects, historyProjects]);
 
   function openMessages(tab: "alerts" | "messages") {
@@ -126,7 +146,7 @@ export default function PortalDashboard({
   }
 
   return (
-    <div className="od-portal">
+    <div className="od-portal" data-theme="light">
       <div className="od-portal-shell">
         <aside className="od-portal-nav">
           <div className="od-portal-brand-row">
@@ -236,41 +256,95 @@ export default function PortalDashboard({
                     ? "Estado de entrega, avance de onboarding, actualizaciones incluidas y saldo pendiente."
                     : "Delivery status, onboarding progress, included updates, and open balance."}
               </p>
-              {view === "overview" ? (
-                <ul className="od-portal-lead-meta" aria-label={es ? "Qué verás" : "What you’ll see"}>
-                  <li>{es ? "Estado" : "Status"}</li>
-                  <li>{es ? "Inicio" : "Onboarding"}</li>
-                  <li>{es ? "Actualizaciones" : "Updates"}</li>
-                  <li>{es ? "Facturación" : "Billing"}</li>
-                </ul>
-              ) : (
-                <ul className="od-portal-lead-meta" aria-label={es ? "Qué verás" : "What you’ll see"}>
-                  <li>{es ? "Actuales" : "Current"}</li>
-                  <li>{es ? "Completados" : "Completed"}</li>
-                  <li>{es ? "Saldos" : "Balances"}</li>
-                </ul>
-              )}
             </div>
             <div className="od-portal-stats" aria-label={es ? "Resumen" : "Summary"}>
               <div className="od-portal-stat">
-                <span className="od-portal-stat-label">{es ? "Activos" : "Active jobs"}</span>
-                <strong>{stats.active}</strong>
-                <em>{es ? "En curso" : "In delivery"}</em>
+                <div
+                  className="od-stat-ring is-jobs"
+                  style={{ "--p": `${stats.activeShare}%` } as CSSProperties}
+                  aria-hidden="true"
+                >
+                  <span>{stats.activeShare}%</span>
+                </div>
+                <div className="od-portal-stat-copy">
+                  <span className="od-portal-stat-label">{es ? "Activos" : "Active jobs"}</span>
+                  <strong>{stats.active}</strong>
+                  <em>
+                    {stats.jobTotal > 0
+                      ? es
+                        ? `${stats.active} de ${stats.jobTotal} trabajos`
+                        : `${stats.active} of ${stats.jobTotal} jobs`
+                      : es
+                        ? "En curso"
+                        : "In delivery"}
+                  </em>
+                </div>
               </div>
               <div className="od-portal-stat">
-                <span className="od-portal-stat-label">{es ? "Acción" : "Action needed"}</span>
-                <strong>{stats.needsYou}</strong>
-                <em>{es ? "Pasos pendientes" : "Open checklist items"}</em>
+                <div
+                  className="od-stat-ring is-action"
+                  style={{ "--p": `${stats.actionShare}%` } as CSSProperties}
+                  aria-hidden="true"
+                >
+                  <span>{stats.actionShare}%</span>
+                </div>
+                <div className="od-portal-stat-copy">
+                  <span className="od-portal-stat-label">{es ? "Acción" : "Action needed"}</span>
+                  <strong>{stats.needsYou}</strong>
+                  <em>
+                    {stats.checklistTotal > 0
+                      ? es
+                        ? `${stats.needsYou} de ${stats.checklistTotal} pasos`
+                        : `${stats.needsYou} of ${stats.checklistTotal} steps`
+                      : es
+                        ? "Pasos pendientes"
+                        : "Open checklist items"}
+                  </em>
+                </div>
               </div>
               <div className="od-portal-stat">
-                <span className="od-portal-stat-label">{es ? "Saldo" : "Open balance"}</span>
-                <strong>{formatCents(stats.openBalance)}</strong>
-                <em>{es ? "Por cobrar" : "Outstanding"}</em>
+                <div
+                  className="od-stat-ring is-balance"
+                  style={{ "--p": `${stats.balanceShare}%` } as CSSProperties}
+                  aria-hidden="true"
+                >
+                  <span>{stats.balanceShare}%</span>
+                </div>
+                <div className="od-portal-stat-copy">
+                  <span className="od-portal-stat-label">{es ? "Saldo" : "Open balance"}</span>
+                  <strong>{formatCents(stats.openBalance)}</strong>
+                  <em>
+                    {stats.billed > 0
+                      ? es
+                        ? `${stats.balanceShare}% de ${formatCents(stats.billed)}`
+                        : `${stats.balanceShare}% of ${formatCents(stats.billed)}`
+                      : es
+                        ? "Por cobrar"
+                        : "Outstanding"}
+                  </em>
+                </div>
               </div>
               <div className="od-portal-stat">
-                <span className="od-portal-stat-label">{es ? "Completados" : "Completed"}</span>
-                <strong>{stats.completed}</strong>
-                <em>{es ? "Histórico" : "All time"}</em>
+                <div
+                  className="od-stat-ring is-done"
+                  style={{ "--p": `${stats.completedShare}%` } as CSSProperties}
+                  aria-hidden="true"
+                >
+                  <span>{stats.completedShare}%</span>
+                </div>
+                <div className="od-portal-stat-copy">
+                  <span className="od-portal-stat-label">{es ? "Completados" : "Completed"}</span>
+                  <strong>{stats.completed}</strong>
+                  <em>
+                    {stats.jobTotal > 0
+                      ? es
+                        ? `${stats.completed} de ${stats.jobTotal} trabajos`
+                        : `${stats.completed} of ${stats.jobTotal} jobs`
+                      : es
+                        ? "Histórico"
+                        : "All time"}
+                  </em>
+                </div>
               </div>
             </div>
           </header>

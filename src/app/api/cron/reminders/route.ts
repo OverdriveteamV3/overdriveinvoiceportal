@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { claimNotification, crmClient } from "@/lib/crm/db";
+import { portalEmailAllowed } from "@/lib/crm/portal-account";
 import { sendPlainEmail } from "@/lib/invoice-email-server";
 
 function authorized(request: Request) {
@@ -58,6 +59,7 @@ export async function GET(request: Request) {
     ).orders?.opportunities?.clients;
     const email = client?.email?.trim();
     if (!email) continue;
+    if (!(await portalEmailAllowed(email, "invoice"))) continue;
     const week = today.slice(0, 7);
     const key = `${row.id}:${week}`;
     const claimed = await claimNotification("final-overdue", key);
@@ -94,6 +96,7 @@ export async function GET(request: Request) {
     ).projects?.orders?.opportunities?.clients;
     const email = client?.email?.trim();
     if (!email) continue;
+    if (!(await portalEmailAllowed(email, "project"))) continue;
     const claimed = await claimNotification("onboarding-due", row.id);
     if (!claimed) continue;
     try {
