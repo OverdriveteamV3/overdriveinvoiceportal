@@ -5,6 +5,22 @@ import { createCrmCheckoutUrl } from "@/lib/stripe-checkout";
 
 type Params = { params: Promise<{ id: string }> };
 
+function resolvePayAmountCents(
+  invoiceTotalCents: number,
+  searchParams: URLSearchParams
+): number {
+  const max = Math.max(0, Number(invoiceTotalCents) || 0);
+  const percentRaw = Number(searchParams.get("percent"));
+  if (Number.isFinite(percentRaw) && percentRaw > 0 && percentRaw <= 100) {
+    return Math.max(50, Math.min(max, Math.round((max * percentRaw) / 100)));
+  }
+  const amountRaw = Number(searchParams.get("amountCents"));
+  if (Number.isFinite(amountRaw) && amountRaw > 0) {
+    return Math.max(50, Math.min(max, Math.round(amountRaw)));
+  }
+  return max;
+}
+
 export async function GET(request: Request, { params }: Params) {
   const userId = await getPortalUserId();
   if (!userId) {
@@ -39,10 +55,15 @@ export async function GET(request: Request, { params }: Params) {
     return NextResponse.redirect(new URL("/portal", request.url));
   }
 
+  const amountCents = resolvePayAmountCents(
+    Number(invoice.total_cents ?? 0),
+    new URL(request.url).searchParams
+  );
+
   const url = await createCrmCheckoutUrl({
     invoiceId: invoice.id,
     documentNumber: invoice.document_number,
-    amountCents: invoice.total_cents,
+    amountCents,
     currency: invoice.currency,
   });
   if (!url) {

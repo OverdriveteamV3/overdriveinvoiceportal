@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import AdminIcon from "@/components/admin/AdminIcons";
@@ -102,191 +103,209 @@ export default function AdminSignInForm() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#eceef1] px-6 py-12">
-      <div className="w-full max-w-md overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-        <div className="border-b border-zinc-100 bg-zinc-50/80 px-8 py-6 text-center">
-          <Image
-            src="/overdrive-logo.png"
-            alt="Over Drive OS"
-            width={800}
-            height={289}
-            priority
-            className="mx-auto h-14 w-auto"
-          />
-          <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
-            Dashboard access
-          </p>
-          <h1 className="mt-1 text-xl font-semibold text-zinc-900">
-            {isCreate ? "Create profile" : "Sign in to Invoices"}
-          </h1>
-          {isCreate ? (
-            <p className="mt-2 text-sm text-zinc-500">
-              Set up a new dashboard profile with your own username and password.
+      <div className="w-full max-w-md">
+        <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+          <div className="border-b border-zinc-100 bg-zinc-50/80 px-8 py-6 text-center">
+            <Image
+              src="/overdrive-logo.png"
+              alt="Over Drive OS"
+              width={800}
+              height={289}
+              priority
+              className="mx-auto h-14 w-auto"
+            />
+            <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.12em] text-zinc-400">
+              Dashboard access
             </p>
-          ) : null}
-        </div>
-
-        <div className="border-b border-zinc-100 px-8 py-4">
-          <div className="segmented w-full">
-            <button
-              type="button"
-              onClick={() => resetForMode("sign-in")}
-              className={`segmented-btn flex-1 ${!isCreate ? "segmented-btn-active" : ""}`}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              onClick={() => resetForMode("create")}
-              className={`segmented-btn flex-1 ${isCreate ? "segmented-btn-active" : ""}`}
-            >
-              Create profile
-            </button>
+            <h1 className="mt-1 text-xl font-semibold text-zinc-900">
+              {isCreate ? "Create profile" : "Sign in to Invoices"}
+            </h1>
+            {isCreate ? (
+              <p className="mt-2 text-sm text-zinc-500">
+                Set up a new dashboard profile with your own username and password.
+              </p>
+            ) : null}
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 px-8 py-6">
-          <div>
-            <label className="doc-label" htmlFor="admin-username">
-              Username
-            </label>
-            <input
-              id="admin-username"
-              className="field"
-              autoComplete={isCreate ? "username" : "username"}
-              placeholder={isCreate ? "e.g. jane_ops" : undefined}
-              value={username}
-              onChange={(event) => setUsername(event.target.value)}
+          <div className="border-b border-zinc-100 px-8 py-4">
+            <div className="segmented w-full">
+              <button
+                type="button"
+                onClick={() => resetForMode("sign-in")}
+                className={`segmented-btn flex-1 ${!isCreate ? "segmented-btn-active" : ""}`}
+              >
+                Sign in
+              </button>
+              <button
+                type="button"
+                onClick={() => resetForMode("create")}
+                className={`segmented-btn flex-1 ${isCreate ? "segmented-btn-active" : ""}`}
+              >
+                Create profile
+              </button>
+            </div>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4 px-8 py-6" noValidate>
+            <div>
+              <label className="doc-label" htmlFor="admin-username">
+                Username
+              </label>
+              <input
+                id="admin-username"
+                name="username"
+                type="text"
+                inputMode="text"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className="field"
+                autoComplete="username"
+                placeholder={isCreate ? "e.g. jane_ops" : "admin"}
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
               disabled={submitting}
               required
             />
           </div>
 
-          <div>
-            <label className="doc-label" htmlFor="admin-password">
-              Password
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="admin-password"
-                type={showPassword ? "text" : "password"}
-                className="field min-w-0 flex-1"
-                autoComplete={isCreate ? "new-password" : "current-password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                disabled={submitting}
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((visible) => !visible)}
-                disabled={submitting}
-                className="flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50/50 px-2.5 text-zinc-500 transition hover:border-zinc-300 hover:bg-white hover:text-zinc-800 disabled:opacity-50"
-                aria-label={showPassword ? "Hide password" : "Show password"}
-              >
-                <AdminIcon
-                  name={showPassword ? "eye-off" : "eye"}
-                  size={16}
-                />
-              </button>
-            </div>
-          </div>
-
-          {isCreate ? (
             <div>
-              <label className="doc-label" htmlFor="admin-confirm-password">
-                Confirm password
+              <label className="doc-label" htmlFor="admin-password">
+                Password
               </label>
               <div className="flex gap-2">
                 <input
-                  id="admin-confirm-password"
-                  type={showConfirmPassword ? "text" : "password"}
-                  className={`field min-w-0 flex-1 ${
-                    showPasswordMatchHint
-                      ? passwordsMatch
-                        ? "border-emerald-300 ring-1 ring-emerald-200"
-                        : "border-red-300 ring-1 ring-red-200"
-                      : ""
-                  }`}
-                  autoComplete="new-password"
-                  value={confirmPassword}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  id="admin-password"
+                  type={showPassword ? "text" : "password"}
+                  className="field min-w-0 flex-1"
+                  autoComplete={isCreate ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                   disabled={submitting}
                   required
                 />
                 <button
                   type="button"
-                  onClick={() =>
-                    setShowConfirmPassword((visible) => !visible)
-                  }
+                  onClick={() => setShowPassword((visible) => !visible)}
                   disabled={submitting}
                   className="flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50/50 px-2.5 text-zinc-500 transition hover:border-zinc-300 hover:bg-white hover:text-zinc-800 disabled:opacity-50"
-                  aria-label={
-                    showConfirmPassword ? "Hide password" : "Show password"
-                  }
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   <AdminIcon
-                    name={showConfirmPassword ? "eye-off" : "eye"}
+                    name={showPassword ? "eye-off" : "eye"}
                     size={16}
                   />
                 </button>
               </div>
-              {showPasswordMatchHint ? (
-                <p
-                  className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium ${
-                    passwordsMatch ? "text-emerald-700" : "text-red-700"
-                  }`}
-                  role="status"
-                  aria-live="polite"
-                >
-                  {passwordsMatch ? (
-                    <>
-                      <span aria-hidden>✓</span>
-                      Passwords match
-                    </>
-                  ) : (
-                    <>
-                      <span aria-hidden>✕</span>
-                      Passwords do not match
-                    </>
-                  )}
-                </p>
-              ) : null}
             </div>
-          ) : (
-            <label className="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-600">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(event) => setRememberMe(event.target.checked)}
-                disabled={submitting}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400"
-              />
-              Remember me
-            </label>
-          )}
 
-          {error ? (
-            <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
-            </div>
-          ) : null}
+            {isCreate ? (
+              <div>
+                <label className="doc-label" htmlFor="admin-confirm-password">
+                  Confirm password
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="admin-confirm-password"
+                    type={showConfirmPassword ? "text" : "password"}
+                    className={`field min-w-0 flex-1 ${
+                      showPasswordMatchHint
+                        ? passwordsMatch
+                          ? "border-emerald-300 ring-1 ring-emerald-200"
+                          : "border-red-300 ring-1 ring-red-200"
+                        : ""
+                    }`}
+                    autoComplete="new-password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    disabled={submitting}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowConfirmPassword((visible) => !visible)
+                    }
+                    disabled={submitting}
+                    className="flex shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50/50 px-2.5 text-zinc-500 transition hover:border-zinc-300 hover:bg-white hover:text-zinc-800 disabled:opacity-50"
+                    aria-label={
+                      showConfirmPassword ? "Hide password" : "Show password"
+                    }
+                  >
+                    <AdminIcon
+                      name={showConfirmPassword ? "eye-off" : "eye"}
+                      size={16}
+                    />
+                  </button>
+                </div>
+                {showPasswordMatchHint ? (
+                  <p
+                    className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium ${
+                      passwordsMatch ? "text-emerald-700" : "text-red-700"
+                    }`}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {passwordsMatch ? (
+                      <>
+                        <span aria-hidden>✓</span>
+                        Passwords match
+                      </>
+                    ) : (
+                      <>
+                        <span aria-hidden>✕</span>
+                        Passwords do not match
+                      </>
+                    )}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <label className="flex cursor-pointer items-center gap-2.5 text-sm text-zinc-600">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(event) => setRememberMe(event.target.checked)}
+                  disabled={submitting}
+                  className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-400"
+                />
+                Remember me
+              </label>
+            )}
 
-          <button
-            type="submit"
-            className="btn w-full"
-            disabled={
-              submitting || (isCreate && showPasswordMatchHint && !passwordsMatch)
-            }
+            {error ? (
+              <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                {error}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              className="btn w-full"
+              disabled={
+                submitting || (isCreate && showPasswordMatchHint && !passwordsMatch)
+              }
+            >
+              {submitting
+                ? isCreate
+                  ? "Creating profile…"
+                  : "Signing in…"
+                : isCreate
+                  ? "Create profile"
+                  : "Sign in"}
+            </button>
+          </form>
+        </div>
+
+        <div className="mt-5 text-center">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-zinc-500 no-underline transition hover:text-zinc-900"
           >
-            {submitting
-              ? isCreate
-                ? "Creating profile…"
-                : "Signing in…"
-              : isCreate
-                ? "Create profile"
-                : "Sign in"}
-          </button>
-        </form>
+            <span aria-hidden="true">←</span>
+            Back to website
+          </Link>
+        </div>
       </div>
     </div>
   );

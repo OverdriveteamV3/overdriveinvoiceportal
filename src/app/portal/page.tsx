@@ -1,31 +1,106 @@
 import Link from "next/link";
-import PortalHeader from "@/components/portal/PortalHeader";
 import LanguageToggle from "@/components/home/LanguageToggle";
+import PortalDashboard from "@/components/portal/PortalDashboard";
 import { getPortalAccount } from "@/lib/crm/portal-account";
 import { crmClient } from "@/lib/crm/db";
-import { PROJECT_STAGE_LABELS, type ProjectStage } from "@/lib/crm/stages";
+import {
+  DEMO_PROJECT_NAME_PREFIX,
+  type PortalInvoiceSummary,
+  type PortalProjectCard,
+} from "@/lib/crm/portal-demo-projects";
 import { getLocale } from "@/lib/get-locale";
-
-const STAGE_ES: Record<ProjectStage, string> = {
-  awaiting_onboarding: "Esperando el inicio",
-  ready_for_kickoff: "Listo para arrancar",
-  scheduled: "Programado",
-  design: "Diseño",
-  development: "Desarrollo",
-  internal_qa: "Control interno",
-  client_review: "Revisión del cliente",
-  revisions: "Revisiones",
-  awaiting_final_payment: "Esperando el pago final",
-  ready_to_launch: "Listo para lanzar",
-  delivered: "Entregado",
-  support: "Soporte",
-  on_hold: "En pausa",
-  cancelled: "Cancelado",
-};
 
 export async function generateMetadata() {
   const locale = await getLocale();
-  return { title: locale === "es" ? "Portal de clientes | Over Drive" : "Client portal | Over Drive" };
+  return {
+    title: locale === "es" ? "Panel de cliente | Over Drive" : "Client dashboard | Over Drive",
+  };
+}
+
+type ProjectRow = {
+  id: string;
+  name?: string;
+  stage?: string;
+  next_action?: string | null;
+  next_action_due?: string | null;
+  revision_allowance?: number | null;
+  rounds_used?: number | null;
+  order_id?: string | null;
+  onboarding_items?: Array<{ label?: string; required?: boolean; state?: string }> | null;
+  orders?:
+    | {
+        id?: string;
+        document_number?: string;
+        total_cents?: number;
+        currency?: string;
+        invoices?: Array<{
+          id?: string;
+          document_number?: string;
+          kind?: string;
+          status?: string;
+          total_cents?: number;
+          currency?: string;
+        }> | null;
+      }
+    | Array<{
+        id?: string;
+        document_number?: string;
+        total_cents?: number;
+        currency?: string;
+        invoices?: Array<{
+          id?: string;
+          document_number?: string;
+          kind?: string;
+          status?: string;
+          total_cents?: number;
+          currency?: string;
+        }> | null;
+      }>
+    | null;
+};
+
+function mapProject(row: ProjectRow): PortalProjectCard {
+  const name = row.name ?? "Project";
+  const orderRaw = row.orders;
+  const order = Array.isArray(orderRaw) ? orderRaw[0] : orderRaw;
+  const invoicesRaw = order?.invoices ?? [];
+  const invoices: PortalInvoiceSummary[] = invoicesRaw
+    .filter((invoice) => invoice?.id && invoice.status !== "draft")
+    .map((invoice) => ({
+      id: String(invoice.id),
+      documentNumber: String(invoice.document_number ?? ""),
+      kind: String(invoice.kind ?? ""),
+      status: String(invoice.status ?? ""),
+      totalCents: Number(invoice.total_cents ?? 0),
+      currency: String(invoice.currency ?? "usd"),
+    }));
+  const orderTotalCents = Number(order?.total_cents ?? 0);
+  const paidCents = invoices
+    .filter((invoice) => invoice.status === "paid")
+    .reduce((sum, invoice) => sum + invoice.totalCents, 0);
+
+  return {
+    id: row.id,
+    name,
+    stage: row.stage ?? "awaiting_onboarding",
+    nextAction: row.next_action ?? "",
+    nextActionDue: row.next_action_due ?? null,
+    revisionAllowance: row.revision_allowance ?? 3,
+    roundsUsed: row.rounds_used ?? 0,
+    onboardingItems: (row.onboarding_items ?? []).map((item) => ({
+      label: item.label ?? "",
+      required: Boolean(item.required),
+      state: item.state ?? "not_requested",
+    })),
+    demo: name.startsWith(DEMO_PROJECT_NAME_PREFIX),
+    href: `/portal/projects/${row.id}`,
+    orderTotalCents,
+    paidCents,
+    balanceCents: Math.max(0, orderTotalCents - paidCents),
+    currency: String(order?.currency ?? "usd"),
+    orderNumber: order?.document_number ? String(order.document_number) : null,
+    invoices,
+  };
 }
 
 export default async function PortalHome({
@@ -36,6 +111,7 @@ export default async function PortalHome({
   const { error } = await searchParams;
   const [account, locale] = await Promise.all([getPortalAccount(), getLocale()]);
   const es = locale === "es";
+
   if (!account) {
     return (
       <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6">
@@ -48,15 +124,17 @@ export default async function PortalHome({
             {es ? "Volver al inicio" : "Back to Home"}
           </Link>
         </div>
-        <h1 className="text-2xl font-semibold text-zinc-900">{es ? "Portal de clientes" : "Client portal"}</h1>
+        <h1 className="text-2xl font-semibold text-zinc-900">
+          {es ? "Panel de cliente" : "Client dashboard"}
+        </h1>
         <p className="mt-2 text-sm text-zinc-600">
           {error
             ? es
               ? "Ese enlace de invitación no es válido o ya se usó. Pide uno nuevo a Over Drive."
               : "That invite link is invalid or already used. Ask Over Drive for a new one."
             : es
-              ? "Usa el enlace de invitación de tu correo para abrir tus proyectos."
-              : "Use the invite link from your email to open your projects."}
+              ? "Entra para ver el progreso de tus proyectos, actualizaciones y mensajes."
+              : "Sign in to see project progress, updates, and messages."}
         </p>
         <p className="mt-4">
           <Link href="/sign-in?next=/portal" className="text-sm font-medium text-zinc-900 underline">
@@ -70,51 +148,30 @@ export default async function PortalHome({
   const supabase = crmClient();
   const { data: memberships } = await supabase
     .from("portal_memberships")
-    .select("project_id, projects(id, name, stage, next_action)")
+    .select(
+      "project_id, projects(id, name, stage, next_action, next_action_due, revision_allowance, rounds_used, order_id, onboarding_items(label, required, state), orders(id, document_number, total_cents, currency, invoices(id, document_number, kind, status, total_cents, currency)))"
+    )
     .eq("portal_user_id", account.id);
 
-  const projects = (memberships ?? []).flatMap((row) => {
+  const liveProjects = (memberships ?? []).flatMap((row) => {
     const linked = (row as { projects?: unknown }).projects;
     const value = Array.isArray(linked) ? linked[0] : linked;
     if (!value || typeof value !== "object" || !("id" in value)) return [];
-    const project = value as { id: string; name?: string; stage?: string; next_action?: string };
-    return [
-      {
-        id: project.id,
-        name: project.name ?? (es ? "Proyecto" : "Project"),
-        stage: project.stage ?? "",
-        next_action: project.next_action ?? "",
-      },
-    ];
+    return [mapProject(value as ProjectRow)];
   });
 
+  const hasSeededDemos = liveProjects.some((project) => project.demo);
+
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-6 py-10">
-      <PortalHeader
-        locale={locale}
-        account={account}
-        title={es ? "Tus proyectos" : "Your projects"}
-        compactProfile
-      />
-      {projects.length === 0 ? (
-        <p className="mt-6 text-sm text-zinc-600">
-          {es ? "Todavía no hay proyectos asignados a esta cuenta." : "No projects are assigned to this login yet."}
-        </p>
-      ) : (
-        <ul className="mt-6 space-y-3">
-          {projects.map((project) => (
-            <li key={project.id} className="rounded-lg border border-zinc-200 bg-white p-4">
-              <Link href={`/portal/projects/${project.id}`} className="text-base font-medium text-zinc-900">
-                {project.name}
-              </Link>
-              <p className="mt-1 text-sm text-zinc-600">
-                {(es ? STAGE_ES[project.stage as ProjectStage] : PROJECT_STAGE_LABELS[project.stage as ProjectStage]) ?? project.stage}
-                {project.next_action ? ` · ${es ? "Siguiente" : "Next"}: ${project.next_action}` : ""}
-              </p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </main>
+    <PortalDashboard
+      locale={locale}
+      account={{
+        name: account.name,
+        email: account.email,
+        avatarUrl: account.avatarUrl,
+      }}
+      liveProjects={liveProjects}
+      hasSeededDemos={hasSeededDemos}
+    />
   );
 }

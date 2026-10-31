@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { Locale } from "@/lib/locale";
 
@@ -20,6 +21,7 @@ type SupportState = {
 const EMPTY: SupportState = { online: false, name: "", email: "", messages: [] };
 
 export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
   const [desk, setDesk] = useState<SupportState>(EMPTY);
@@ -29,6 +31,7 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const threadRef = useRef<HTMLDivElement>(null);
+  const hiddenOnPortal = pathname === "/portal" || pathname.startsWith("/portal/");
 
   useEffect(() => {
     if (!open) return;
@@ -98,6 +101,8 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
   const es = locale === "es";
   const emailRequired = ready && !desk.online && !desk.email;
   const waitingOnEmail = !desk.online && desk.messages.length > 0 && !desk.email;
+
+  if (hiddenOnPortal) return null;
 
   return (
     <div className="support-dock">
