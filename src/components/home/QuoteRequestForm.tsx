@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { submitQuoteRequest } from "@/app/quote/actions";
 import { signOutAccount } from "@/app/sign-in/actions";
 import LanguageToggle from "@/components/home/LanguageToggle";
+import { formatPhoneNumber } from "@/lib/client-form";
 import type { Locale } from "@/lib/locale";
 
 const SERVICES = [
@@ -13,6 +14,14 @@ const SERVICES = [
   ["Apps & Software", "Apps y software"],
   ["UI/UX & Branding", "UI/UX y marca"],
 ] as const;
+
+function websiteHostFromInput(value: string) {
+  let text = value.trim().replace(/\s/g, "");
+  text = text.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  text = text.replace(/^\/+/, "");
+  text = text.replace(/^www\./i, "");
+  return text.slice(0, 196);
+}
 
 const QUOTE_ERRORS: Record<string, string> = {
   "Add your name, email, service, project name, and a short description.":
@@ -33,6 +42,8 @@ export default function QuoteRequestForm({
   const [saving, setSaving] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
+  const [phone, setPhone] = useState("");
+  const [websiteHost, setWebsiteHost] = useState("");
   const es = locale === "es";
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -108,7 +119,16 @@ export default function QuoteRequestForm({
                 </label>
                 <label>
                   {es ? "Teléfono" : "Phone"}
-                  <input name="phone" type="tel" autoComplete="tel" maxLength={40} />
+                  <input
+                    name="phone"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    maxLength={40}
+                    placeholder="(555) 555-5555"
+                    value={phone}
+                    onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
+                  />
                 </label>
                 <label>
                   {es ? "Empresa" : "Company"}
@@ -180,7 +200,21 @@ export default function QuoteRequestForm({
               </label>
               <label>
                 {es ? "Sitio actual" : "Current website"}
-                <input name="website" type="url" placeholder="https://" maxLength={200} />
+                <span className="quote-website">
+                  <span aria-hidden="true">www.</span>
+                  <input
+                    type="text"
+                    inputMode="url"
+                    autoComplete="url"
+                    placeholder="example.com"
+                    maxLength={196}
+                    spellCheck={false}
+                    aria-label={es ? "Sitio actual, www." : "Current website, www."}
+                    value={websiteHost}
+                    onChange={(event) => setWebsiteHost(websiteHostFromInput(event.target.value))}
+                  />
+                </span>
+                <input type="hidden" name="website" value={websiteHost ? `www.${websiteHost}` : ""} />
               </label>
             </fieldset>
 
@@ -316,6 +350,28 @@ export default function QuoteRequestForm({
           font-weight: 400;
         }
         .quote-page textarea { min-height: 110px; resize: vertical; }
+        .quote-website {
+          display: flex;
+          align-items: center;
+          margin-top: 6px;
+          border: 1px solid #cbd5df;
+          border-radius: 8px;
+          background: #fff;
+        }
+        .quote-website > span {
+          padding-left: 12px;
+          color: #56616d;
+          font-weight: 600;
+        }
+        .quote-website input {
+          margin-top: 0;
+          border: 0;
+          border-radius: 8px;
+          padding-left: 0;
+          background: transparent;
+        }
+        .quote-website:focus-within { outline: 3px solid #4590ad; outline-offset: 3px; }
+        .quote-website input:focus-visible { outline: none; }
         .quote-button {
           display: inline-flex;
           align-items: center;

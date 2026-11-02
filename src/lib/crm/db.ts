@@ -647,6 +647,19 @@ export async function overview(profileId: string) {
     }))
   );
 
+  const { data: submissionRows, error: submissionError } = await supabase
+    .from("opportunities")
+    .select(
+      "id, title, service_interest, description, budget_range, desired_timeline, preferred_contact, created_at, clients(display_name, company_name, email, phone, website)"
+    )
+    .eq("profile_id", profileId)
+    .eq("source", "website")
+    .eq("landing_page", "/quote")
+    .eq("stage", "new_lead")
+    .is("archived_at", null)
+    .order("created_at", { ascending: false });
+  if (submissionError) throw new Error(submissionError.message);
+
   return {
     openPipelineCents: openPipeline,
     invoicedCents: invoiced,
@@ -657,6 +670,44 @@ export async function overview(profileId: string) {
     projectsOverRevision: (projects.data ?? []).filter(
       (row) => row.rounds_used >= row.revision_allowance
     ).length,
+    newSubmissions: (submissionRows ?? []).map(mapNewSubmission),
+  };
+}
+
+type SubmissionClient = {
+  display_name?: string;
+  company_name?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+};
+
+function mapNewSubmission(row: {
+  id: string;
+  title: string;
+  service_interest: string;
+  description: string;
+  budget_range: string;
+  desired_timeline: string;
+  preferred_contact: string;
+  created_at: string;
+  clients: SubmissionClient | SubmissionClient[] | null;
+}) {
+  const client = Array.isArray(row.clients) ? row.clients[0] : row.clients;
+  return {
+    id: row.id,
+    title: row.title,
+    service: row.service_interest,
+    description: row.description,
+    budget: row.budget_range,
+    timeline: row.desired_timeline,
+    contact: row.preferred_contact,
+    createdAt: row.created_at,
+    name: client?.display_name ?? "",
+    company: client?.company_name ?? "",
+    email: client?.email ?? "",
+    phone: client?.phone ?? "",
+    website: client?.website ?? "",
   };
 }
 

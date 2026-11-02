@@ -9,6 +9,45 @@ import {
 } from "@/lib/supabase/env";
 
 const OAUTH_NEXT_COOKIE = "od_oauth_next";
+const OAUTH_FLOW_COOKIE = "od_oauth_flow";
+
+function continueToGoogleHtml(target: string) {
+  const scriptUrl = JSON.stringify(target).replace(/</g, "\\u003c");
+  const href = target
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;");
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="referrer" content="no-referrer">
+<title>Continue with Google</title>
+</head>
+<body>
+<p>Continuing to Google…</p>
+<p><a href="${href}">Continue</a></p>
+<script>location.replace(${scriptUrl})</script>
+</body>
+</html>`;
+}
+
+function applyAuthCookies(
+  response: NextResponse,
+  cookies: { name: string; value: string; options: Record<string, unknown> }[],
+  secure: boolean
+) {
+  for (const cookie of cookies) {
+    const sameSite = cookie.options.sameSite;
+    response.cookies.set(cookie.name, cookie.value, {
+      path: typeof cookie.options.path === "string" ? cookie.options.path : "/",
+      ...(typeof cookie.options.maxAge === "number" ? { maxAge: cookie.options.maxAge } : {}),
+      httpOnly: cookie.options.httpOnly === true,
+      secure,
+      sameSite: sameSite === "strict" || sameSite === "none" || sameSite === "lax" ? sameSite : "lax",
+    });
+  }
+}
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -49,22 +88,40 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  if (error || !data.url) {
+  const authorizePrefix = `${supabaseUrl.replace(/\/$/, "")}/auth/v1/authorize`;
+  if (error || !data.url || !data.url.startsWith(authorizePrefix)) {
     return NextResponse.redirect(
       new URL(`/sign-in?error=google_start&next=${encodeURIComponent(nextPath)}`, origin)
     );
   }
 
-  const response = NextResponse.redirect(data.url);
-  for (const { name, value, options } of pendingCookies) {
-    response.cookies.set(name, value, options);
-  }
+  // A document response stores the PKCE cookie before the browser leaves for Google.
+  // A redirect straight to Google can drop that cookie, so the first return fails.
+  const secure = origin.startsWith("https://");
+  const response = new NextResponse(continueToGoogleHtml(data.url), {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "referrer-policy": "no-referrer",
+    },
+  });
+  applyAuthCookies(response, pendingCookies, secure);
   response.cookies.set(OAUTH_NEXT_COOKIE, nextPath, {
     httpOnly: true,
     sameSite: "lax",
-    secure: origin.startsWith("https://"),
+    secure,
     path: "/",
     maxAge: 60 * 10,
   });
+  if (data.flowId) {
+    response.cookies.set(OAUTH_FLOW_COOKIE, data.flowId, {
+      httpOnly: true,
+      sameSite: "lax",
+      secure,
+      path: "/",
+      maxAge: 60 * 10,
+    });
+  }
   return response;
 }

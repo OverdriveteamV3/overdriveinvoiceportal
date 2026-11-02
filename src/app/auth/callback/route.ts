@@ -16,6 +16,7 @@ import {
 } from "@/lib/supabase/env";
 
 const OAUTH_NEXT_COOKIE = "od_oauth_next";
+const OAUTH_FLOW_COOKIE = "od_oauth_flow";
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
       new URL(`/sign-in?error=${codeName}&next=${encodeURIComponent(nextPath)}`, origin)
     );
     response.cookies.set(OAUTH_NEXT_COOKIE, "", { path: "/", maxAge: 0 });
+    response.cookies.set(OAUTH_FLOW_COOKIE, "", { path: "/", maxAge: 0 });
     return response;
   };
 
@@ -53,7 +55,13 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  const flowId = request.cookies.get(OAUTH_FLOW_COOKIE)?.value ?? "";
+  const flowCookiePresent =
+    Boolean(flowId) && request.cookies.getAll().some((cookie) => cookie.name.includes(flowId));
+  const { data, error } = await supabase.auth.exchangeCodeForSession(
+    code,
+    flowCookiePresent ? { flowId } : undefined
+  );
   if (error || !data.user) {
     console.error("[auth/callback] exchangeCodeForSession", error?.message ?? "no user");
     return fail("google_session");
@@ -87,5 +95,6 @@ export async function GET(request: NextRequest) {
   }
   response.cookies.set(PORTAL_SESSION_COOKIE, createPortalSession(result.id), portalCookieOptions());
   response.cookies.set(OAUTH_NEXT_COOKIE, "", { path: "/", maxAge: 0 });
+  response.cookies.set(OAUTH_FLOW_COOKIE, "", { path: "/", maxAge: 0 });
   return response;
 }

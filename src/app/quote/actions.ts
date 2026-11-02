@@ -32,12 +32,21 @@ function line(label: string, value: string) {
   return text ? `${label}: ${text}` : "";
 }
 
+function formatQuoteWebsite(value: string) {
+  let text = value.trim().replace(/\s/g, "");
+  text = text.replace(/^[a-z][a-z0-9+.-]*:\/\//i, "");
+  text = text.replace(/^\/+/, "");
+  text = text.replace(/^www\./i, "");
+  if (!text) return "";
+  return `www.${text}`.slice(0, 200);
+}
+
 export async function submitQuoteRequest(formData: FormData): Promise<QuoteRequestResult> {
   const name = String(formData.get("name") ?? "").trim().slice(0, 100);
   const email = String(formData.get("email") ?? "").trim().slice(0, 200);
   const phone = String(formData.get("phone") ?? "").trim().slice(0, 40);
   const company = String(formData.get("company") ?? "").trim().slice(0, 160);
-  const website = String(formData.get("website") ?? "").trim().slice(0, 200);
+  const website = formatQuoteWebsite(String(formData.get("website") ?? ""));
   const projectName = String(formData.get("projectName") ?? "").trim().slice(0, 140);
   const details = String(formData.get("details") ?? "").trim().slice(0, 4000);
   const goals = String(formData.get("goals") ?? "").trim().slice(0, 1000);
