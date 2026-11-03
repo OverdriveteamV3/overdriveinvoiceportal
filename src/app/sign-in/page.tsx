@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import SignInForm from "@/components/home/SignInForm";
-import { safeNextPath } from "@/lib/crm/portal-account";
-import { getPortalUserId } from "@/lib/crm/portal-session";
+import { getPortalAccount, safeNextPath } from "@/lib/crm/portal-account";
 import { getLocale } from "@/lib/get-locale";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -25,8 +24,8 @@ export default async function SignInPage({
 }) {
   const params = await searchParams;
   const nextPath = safeNextPath(params.next);
-  const [userId, locale] = await Promise.all([getPortalUserId(), getLocale()]);
-  if (userId) redirect(nextPath);
+  const [account, locale] = await Promise.all([getPortalAccount(), getLocale()]);
+  if (account) redirect(nextPath);
 
   return (
     <SignInForm
