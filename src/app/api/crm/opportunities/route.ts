@@ -50,6 +50,7 @@ export async function POST(request: Request) {
       serviceInterest: body.serviceInterest,
       description: body.description,
       source,
+      campaign: typeof body.campaign === "string" ? body.campaign : "",
       estimatedValueCents:
         typeof body.estimatedValue === "number"
           ? dollarsToCents(body.estimatedValue)

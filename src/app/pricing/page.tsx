@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { publicMaintenancePage } from "@/components/home/public-maintenance";
 import Link from "next/link";
 import LanguageToggle from "@/components/home/LanguageToggle";
 import { getLocale } from "@/lib/get-locale";
@@ -15,6 +16,8 @@ export async function generateMetadata(): Promise<Metadata> {
 
 
 export default async function PricingPage() {
+  const down = await publicMaintenancePage();
+  if (down) return down;
   const locale = await getLocale();
   const copy = pricingContent(locale);
   return (

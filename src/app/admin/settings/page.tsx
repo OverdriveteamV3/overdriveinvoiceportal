@@ -9,6 +9,7 @@ import {
 } from "@/lib/invoice-email-server";
 import { hasStripeConfig } from "@/lib/stripe-checkout";
 import { hasTwilioConfig } from "@/lib/invoice-sms-server";
+import { getSecurityOverview } from "@/lib/site-security";
 import {
   getBinSummaries,
   getDatabaseStats,
@@ -25,13 +26,14 @@ export default async function AdminSettingsPage() {
   const profile = await getAdminPageProfile();
   const scope = await getAdminPageStorageScope();
 
-  const [stats, deletedRecords, bins, adminProfiles, accountSettings] =
+  const [stats, deletedRecords, bins, adminProfiles, accountSettings, security] =
     await Promise.all([
     getDatabaseStats(scope),
     getDeletedRecords(scope),
     getBinSummaries(scope),
     profile.role === "master" ? listAdminProfileSummaries() : Promise.resolve([]),
     getAdminAccountSettings(profile),
+    getSecurityOverview(),
   ]);
   const totalRecords = stats.bins.reduce((sum, bin) => sum + bin.count, 0);
 
@@ -51,6 +53,8 @@ export default async function AdminSettingsPage() {
       isMasterAdmin={profile.role === "master"}
       initialAdminProfiles={adminProfiles}
       initialAccountSettings={accountSettings}
+      maintenanceEnabled={security.maintenance}
+      securitySuggestions={security.suggestions}
     />
   );
 }

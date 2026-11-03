@@ -9,7 +9,7 @@ import {
   readPortalResetToken,
 } from "@/lib/crm/portal-session";
 import { parsePortalPreferences, type PortalPreferences } from "@/lib/crm/portal-preferences";
-import { hasEmailConfig, sendPlainEmail } from "@/lib/invoice-email-server";
+import { emailDeliveryEnabled, sendPlainEmail } from "@/lib/invoice-email-server";
 
 export type { PortalPreferences };
 
@@ -267,7 +267,7 @@ export async function requestPortalPasswordReset(
     const user = (matches ?? []).find((row) => String(row.email).toLowerCase() === email);
     if (!user?.id) return { ok: true };
 
-    if (!hasEmailConfig()) {
+    if (!(await emailDeliveryEnabled())) {
       return { error: "Password reset email is not configured yet." };
     }
 
@@ -375,7 +375,7 @@ async function sendPortalLink(input: {
   intro: string;
   url: string;
 }): Promise<{ ok: true } | { error: string }> {
-  if (!hasEmailConfig()) return { error: "Email is not configured yet." };
+  if (!(await emailDeliveryEnabled())) return { error: "Email is not configured yet." };
   try {
     await sendPlainEmail({
       to: input.to,

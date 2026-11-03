@@ -16,6 +16,7 @@ import AdminHeader from "@/components/admin/AdminHeader";
 import AdminIcon from "@/components/admin/AdminIcons";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminCrmPanel from "@/components/admin/AdminCrmPanel";
+import AdminTeamPanel from "@/components/admin/AdminTeamPanel";
 import {
   adminReturnHref,
   adminReturnLabel,
@@ -204,6 +205,20 @@ export default function AdminDataBinsPanel({
     handleSelectIntegrations();
   };
 
+  const handleSelectTeam = () => {
+    const origin: AdminReturnFrom | null =
+      activeView === "team"
+        ? returnFrom
+        : activeView === "home"
+          ? "dashboard"
+          : activeView;
+    setActiveView("team");
+    setExpandedId(null);
+    setSelectedDocument(null);
+    setMessage(null);
+    router.replace(adminViewPath("team", origin));
+  };
+
   const handleSelectCrm = (view: CrmView) => {
     const origin: AdminReturnFrom | null =
       activeView === view
@@ -309,6 +324,8 @@ export default function AdminDataBinsPanel({
         <AdminIcon name={DATA_BINS[activeView].icon} size={18} />
         {DATA_BINS[activeView].label}
       </span>
+    ) : activeView === "team" ? (
+      "Team"
     ) : (
       crmNav?.label ?? "Workspace"
     );
@@ -320,12 +337,14 @@ export default function AdminDataBinsPanel({
         ? "Email, payments, and cloud storage"
         : isDataBinView(activeView)
           ? DATA_BINS[activeView].description
-          : crmNav?.description ?? "";
+          : activeView === "team"
+            ? ""
+            : crmNav?.description ?? "";
 
   const showPanelHeader = activeView !== "home";
 
   return (
-    <div className="min-h-screen bg-[#eceef1]">
+    <div className="admin-shell">
       <AdminClientOnboardModal
         open={clientModalOpen}
         onClose={() => setClientModalOpen(false)}
@@ -345,10 +364,11 @@ export default function AdminDataBinsPanel({
           onSelectBin: handleSelectBinFromSidebar,
           onSelectIntegrations: handleSelectIntegrationsFromSidebar,
           onSelectCrm: handleSelectCrm,
+          onSelectTeam: handleSelectTeam,
         }}
       />
 
-      <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[280px_1fr]">
+      <div className="admin-shell-body">
         <AdminSidebar
           bins={bins}
           activeView={activeView}
@@ -356,9 +376,10 @@ export default function AdminDataBinsPanel({
           onSelectBin={handleSelectBinFromSidebar}
           onSelectIntegrations={handleSelectIntegrationsFromSidebar}
           onSelectCrm={handleSelectCrm}
+          onSelectTeam={handleSelectTeam}
         />
 
-        <main className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <main className="admin-shell-main">
           {showPanelHeader && (
             <div className="flex items-start justify-between gap-4 border-b border-zinc-100 px-6 py-4">
               <div className="min-w-0">
@@ -373,7 +394,9 @@ export default function AdminDataBinsPanel({
                   </button>
                 ) : null}
                 <h2 className="text-base font-semibold text-zinc-900">{mainTitle}</h2>
-                <p className="text-sm text-zinc-500">{mainDescription}</p>
+                {mainDescription ? (
+                  <p className="text-sm text-zinc-500">{mainDescription}</p>
+                ) : null}
                 {selectedBin && isDocumentBin(selectedBin) ? (
                   <div
                     className="admin-doc-filter-bar"
@@ -426,6 +449,8 @@ export default function AdminDataBinsPanel({
             <AdminIntegrationsPanel integrations={integrations} />
           ) : isCrmView(activeView) ? (
             <AdminCrmPanel view={activeView} />
+          ) : activeView === "team" ? (
+            <AdminTeamPanel />
           ) : (
             <div
               className={

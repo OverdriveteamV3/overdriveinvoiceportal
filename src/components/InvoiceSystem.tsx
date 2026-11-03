@@ -413,6 +413,19 @@ export default function InvoiceSystem() {
     try {
       const result = await sendInvoiceEmail(state, recipient);
       if (docType === "Quote") {
+        const quoteOpportunity =
+          window.sessionStorage.getItem("overdrive-quote-opportunity") || opportunityId;
+        if (quoteOpportunity) {
+          await fetch(`/api/crm/opportunities/${quoteOpportunity}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "stage",
+              stage: "quote_sent",
+              reason: "Quote emailed to the client",
+            }),
+          });
+        }
         setToast({
           message: `Quote emailed to ${result.to} with PDF attached`,
           type: "success",

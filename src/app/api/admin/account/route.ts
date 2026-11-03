@@ -8,6 +8,7 @@ import {
   updateAdminAccountSettings,
 } from "@/lib/admin-account";
 import { getAdminSessionProfile } from "@/lib/admin-auth-server";
+import type { SocialLinks } from "@/lib/socials";
 
 export async function GET() {
   const profile = await getAdminSessionProfile();
@@ -28,7 +29,9 @@ export async function PATCH(request: Request) {
   let body: {
     displayName?: string;
     email?: string;
+    phone?: string;
     website?: string;
+    socials?: SocialLinks;
     logo?: string;
   };
 

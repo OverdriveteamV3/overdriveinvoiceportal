@@ -1,4 +1,5 @@
 import OverDriveHome from "@/components/home/OverDriveHome";
+import { publicMaintenancePage } from "@/components/home/public-maintenance";
 import { getPortalAccount } from "@/lib/crm/portal-account";
 import { getLocale } from "@/lib/get-locale";
 
@@ -16,6 +17,8 @@ export async function generateMetadata() {
 }
 
 export default async function Home() {
+  const down = await publicMaintenancePage();
+  if (down) return down;
   const [locale, account] = await Promise.all([getLocale(), getPortalAccount()]);
   return (
     <OverDriveHome

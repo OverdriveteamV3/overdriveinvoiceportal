@@ -162,6 +162,156 @@ export async function createOpportunity(input: {
   return { opportunityId: opportunity.id as string, clientId: client.id as string, possibleDuplicate };
 }
 
+export async function decideSubmission(input: {
+  opportunityId: string;
+  profileId: string;
+  actor: string;
+  decision: "accept" | "decline";
+  memo?: string;
+}) {
+  const supabase = crmClient();
+  const { data: row, error } = await supabase
+    .from("opportunities")
+    .select("id, title, stage")
+    .eq("id", input.opportunityId)
+    .eq("profile_id", input.profileId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!row) throw new Error("Opportunity not found.");
+  if (row.stage !== "new_lead") throw new Error("This request was already decided.");
+
+  const memo = (input.memo ?? "").trim().slice(0, 2000);
+  if (input.decision === "decline" && !memo) {
+    throw new Error("Add a note so the client knows why this was declined.");
+  }
+
+  const title = String(row.title || "your project").trim().slice(0, 140);
+  const stage = input.decision === "accept" ? "qualification" : "closed_lost";
+  await setOpportunityStage({
+    opportunityId: input.opportunityId,
+    profileId: input.profileId,
+    stage,
+    actor: input.actor,
+    reason:
+      input.decision === "accept"
+        ? "Accepted from a website project request"
+        : memo,
+  });
+
+  const body =
+    input.decision === "accept"
+      ? `[portal:accepted] ${title}`
+      : `[portal:declined] ${title}\n${memo}`;
+  const { error: noteError } = await supabase.from("activities").insert({
+    opportunity_id: input.opportunityId,
+    profile_id: input.profileId,
+    kind: "note",
+    body,
+    client_visible: true,
+  });
+  if (noteError) throw new Error(noteError.message);
+}
+
+export async function listClientDecisionNotes(email: string) {
+  const target = email.trim().toLowerCase();
+  if (!target) return [];
+  const supabase = crmClient();
+  const { data: clients, error: clientError } = await supabase
+    .from("clients")
+    .select("id")
+    .ilike("email", target);
+  if (clientError) throw new Error(clientError.message);
+  const clientIds = (clients ?? []).map((client) => client.id as string);
+  if (clientIds.length === 0) return [];
+
+  const { data: opportunities, error: opportunityError } = await supabase
+    .from("opportunities")
+    .select("id")
+    .in("client_id", clientIds);
+  if (opportunityError) throw new Error(opportunityError.message);
+  const opportunityIds = (opportunities ?? []).map((row) => row.id as string);
+  if (opportunityIds.length === 0) return [];
+
+  const { data: notes, error: noteError } = await supabase
+    .from("activities")
+    .select("id, body, created_at")
+    .eq("kind", "note")
+    .eq("client_visible", true)
+    .in("opportunity_id", opportunityIds)
+    .order("created_at", { ascending: false });
+  if (noteError) throw new Error(noteError.message);
+  return (notes ?? []).map((note) => ({
+    id: String(note.id),
+    body: String(note.body ?? ""),
+    createdAt: String(note.created_at ?? ""),
+  }));
+}
+
+const QUOTE_DECISION_STAGES = ["quote_sent", "negotiation", "accepted_pending", "closed_lost"] as const;
+
+export async function listClientQuoteOffers(email: string) {
+  const target = email.trim().toLowerCase();
+  if (!target) return [];
+  const supabase = crmClient();
+  const { data, error } = await supabase
+    .from("opportunities")
+    .select("id, title, stage, service_interest, clients!inner(email)")
+    .in("stage", [...QUOTE_DECISION_STAGES])
+    .is("archived_at", null)
+    .ilike("clients.email", target)
+    .order("updated_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => ({
+    id: String(row.id),
+    title: String(row.title ?? "Project"),
+    stage: String(row.stage),
+    service: String(row.service_interest ?? ""),
+  }));
+}
+
+export async function decideClientQuote(input: {
+  email: string;
+  opportunityId: string;
+  decision: "accept" | "decline" | "negotiate";
+  memo?: string;
+}) {
+  const target = input.email.trim().toLowerCase();
+  const supabase = crmClient();
+  const { data: row, error } = await supabase
+    .from("opportunities")
+    .select("id, title, stage, profile_id, clients!inner(email)")
+    .eq("id", input.opportunityId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  const client = Array.isArray(row?.clients) ? row.clients[0] : row?.clients;
+  const owner = String((client as { email?: string } | null)?.email ?? "").trim().toLowerCase();
+  if (!row || owner !== target) throw new Error("Quote not found.");
+  if (row.stage !== "quote_sent") throw new Error("This quote was already decided.");
+  const memo = (input.memo ?? "").trim().slice(0, 2000);
+  if (input.decision !== "accept" && !memo) throw new Error("Add a note for the team.");
+  const stage =
+    input.decision === "accept" ? "accepted_pending" : input.decision === "decline" ? "closed_lost" : "negotiation";
+  const profileId = String(row.profile_id || "master");
+  await setOpportunityStage({
+    opportunityId: input.opportunityId,
+    profileId,
+    stage,
+    actor: target,
+    reason: memo || "Client accepted the quote",
+  });
+  const title = String(row.title || "your project").trim().slice(0, 140);
+  const prefix =
+    input.decision === "accept" ? "[portal:accepted]" : input.decision === "decline" ? "[portal:declined]" : "[portal:negotiate]";
+  const { error: noteError } = await supabase.from("activities").insert({
+    opportunity_id: input.opportunityId,
+    profile_id: profileId,
+    kind: "note",
+    body: memo ? `${prefix} ${title}\n${memo}` : `${prefix} ${title}`,
+    client_visible: true,
+  });
+  if (noteError) throw new Error(noteError.message);
+}
+
 export async function setOpportunityStage(input: {
   opportunityId: string;
   profileId: string;
@@ -185,6 +335,58 @@ export async function setOpportunityStage(input: {
     p_reason: input.reason ?? "",
   });
   if (rpcError) throw new Error(rpcError.message);
+}
+
+export async function updateSubmission(input: {
+  opportunityId: string;
+  profileId: string;
+  name: string;
+  company: string;
+  title: string;
+  service: string;
+  budget: string;
+  timeline: string;
+  contact: string;
+  email: string;
+  phone: string;
+  website: string;
+}) {
+  const supabase = crmClient();
+  const { data: row, error } = await supabase
+    .from("opportunities")
+    .select("id, client_id")
+    .eq("id", input.opportunityId)
+    .eq("profile_id", input.profileId)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!row) throw new Error("Opportunity not found.");
+
+  const { error: opportunityError } = await supabase
+    .from("opportunities")
+    .update({
+      title: input.title.trim(),
+      service_interest: input.service.trim(),
+      budget_range: input.budget.trim(),
+      desired_timeline: input.timeline.trim(),
+      preferred_contact: input.contact.trim(),
+    })
+    .eq("id", input.opportunityId)
+    .eq("profile_id", input.profileId);
+  if (opportunityError) throw new Error(opportunityError.message);
+
+  if (!row.client_id) return;
+  const { error: clientError } = await supabase
+    .from("clients")
+    .update({
+      display_name: input.name.trim(),
+      company_name: input.company.trim(),
+      email: input.email.trim(),
+      phone: input.phone.trim(),
+      website: input.website.trim(),
+    })
+    .eq("id", row.client_id)
+    .eq("profile_id", input.profileId);
+  if (clientError) throw new Error(clientError.message);
 }
 
 export async function archiveOpportunity(input: {
@@ -650,7 +852,7 @@ export async function overview(profileId: string) {
   const { data: submissionRows, error: submissionError } = await supabase
     .from("opportunities")
     .select(
-      "id, title, service_interest, description, budget_range, desired_timeline, preferred_contact, created_at, clients(display_name, company_name, email, phone, website)"
+      "id, title, service_interest, description, budget_range, desired_timeline, preferred_contact, campaign, created_at, clients(display_name, company_name, email, phone, website)"
     )
     .eq("profile_id", profileId)
     .eq("source", "website")
@@ -690,6 +892,7 @@ function mapNewSubmission(row: {
   budget_range: string;
   desired_timeline: string;
   preferred_contact: string;
+  campaign: string;
   created_at: string;
   clients: SubmissionClient | SubmissionClient[] | null;
 }) {
@@ -702,6 +905,7 @@ function mapNewSubmission(row: {
     budget: row.budget_range,
     timeline: row.desired_timeline,
     contact: row.preferred_contact,
+    request: row.campaign,
     createdAt: row.created_at,
     name: client?.display_name ?? "",
     company: client?.company_name ?? "",

@@ -2,24 +2,28 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AdminAccountProfileCard from "@/components/admin/AdminAccountProfileCard";
+import AdminSecurityCard from "@/components/admin/AdminSecurityCard";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminIcon from "@/components/admin/AdminIcons";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import type { AdminIconName } from "@/lib/admin-icons";
 import type { AdminAccountSettings } from "@/lib/admin-account";
+import type { SecuritySuggestion } from "@/lib/site-security";
 import type { AdminProfileListItem } from "@/lib/admin-profiles";
 import { DATA_BINS, type BinSummary, type DataBinId, type DeletedRecord } from "@/lib/storage/dataBins";
 import {
   fetchDeletedRecords,
   downloadCsvExport,
+  promptSaveCsvExport,
   uploadCsvImport,
   masterResetDatabase,
   purgeAllDeletedRecords,
   restoreDeletedRecord,
 } from "@/lib/storage/dbClient";
 import type { StorageBackend } from "@/lib/storage/storageBackend";
+import type { IntegrationPublicView, IntegrationService } from "@/lib/integration-settings";
 import {
   getStorageBackendLabel,
   isCloudStorageBackend,
@@ -38,6 +42,8 @@ type AdminSettingsPanelProps = {
   isMasterAdmin?: boolean;
   initialAdminProfiles?: AdminProfileListItem[];
   initialAccountSettings: AdminAccountSettings;
+  maintenanceEnabled: boolean;
+  securitySuggestions: SecuritySuggestion[];
 };
 
 function formatProfileDate(iso: string): string {
@@ -60,53 +66,161 @@ function formatDeletedDate(iso: string): string {
   });
 }
 
-function StatusPill({ connected }: { connected: boolean }) {
+function SetupLines({ title, lines }: { title: string; lines: string[] }) {
   return (
-    <span
-      className={`admin-settings-status-pill ${
-        connected
-          ? "admin-settings-status-pill-on"
-          : "admin-settings-status-pill-off"
-      }`}
-    >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${
-          connected ? "bg-emerald-500" : "bg-zinc-400"
-        }`}
-      />
-      {connected ? "Connected" : "Not configured"}
-    </span>
+    <div className="mt-3 rounded-lg bg-white/80 px-3 py-2">
+      <p className="text-[11px] font-semibold text-zinc-700">{title}</p>
+      <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-zinc-600">
+        {lines.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function SettingsCard({
-  title,
-  description,
+function ConfigField({
+  label,
+  value,
+  onChange,
+  secret = false,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  secret?: boolean;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+      {label}
+      <input
+        type={secret ? "password" : "text"}
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-900"
+      />
+    </label>
+  );
+}
+
+function ConfigPanel({
+  children,
+  busy,
+  error,
+  onSave,
+  onRemove,
+}: {
+  children: React.ReactNode;
+  busy: boolean;
+  error: string;
+  onSave?: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="mt-3 space-y-2 border-t border-zinc-200/80 pt-3">
+      {children}
+      {error ? (
+        <p className="rounded-md bg-red-50 px-2 py-1.5 text-xs text-red-700" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={busy}
+          className="rounded-md bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-60"
+        >
+          Remove settings
+        </button>
+        {onSave ? (
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={busy}
+            className="rounded-md bg-[#0780f7] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+          >
+            {busy ? "Saving…" : "Save connection"}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function IntegrationTile({
   icon,
+  title,
+  detail,
   connected,
+  facts,
+  configOpen = false,
+  onConfigure,
   children,
 }: {
-  title: string;
-  description: string;
   icon: AdminIconName;
+  title: string;
+  detail: string;
   connected: boolean;
+  facts: Array<[string, string]>;
+  configOpen?: boolean;
+  onConfigure?: () => void;
   children?: React.ReactNode;
 }) {
   return (
-    <article className="admin-settings-card">
-      <div className="admin-settings-card-header">
-        <div className="flex min-w-0 gap-3">
-          <span className="admin-dash-action-icon mt-0.5 shrink-0">
-            <AdminIcon name={icon} size={18} />
+    <article
+      className={`rounded-xl border px-4 py-3 ${
+        connected ? "border-emerald-100 bg-emerald-50/50" : "border-zinc-200 bg-zinc-50"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white shadow-sm ${
+              connected ? "text-emerald-600" : "text-zinc-400"
+            }`}
+          >
+            <AdminIcon name={icon} size={16} />
           </span>
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-zinc-900">{title}</h3>
-            <p className="mt-1 text-sm text-zinc-500">{description}</p>
+            <h4 className="text-sm font-semibold text-zinc-900">{title}</h4>
+            <p className="truncate text-xs text-zinc-500">{detail}</p>
           </div>
         </div>
-        <StatusPill connected={connected} />
+        <span className="flex shrink-0 items-center gap-1">
+          {onConfigure ? (
+            <button
+              type="button"
+              aria-label={`Configure ${title}`}
+              aria-expanded={configOpen}
+              title="Configure"
+              onClick={onConfigure}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 hover:bg-white hover:text-zinc-900"
+            >
+              <AdminIcon name="settings" size={15} />
+            </button>
+          ) : null}
+          <span
+            className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-500" : "bg-zinc-300"}`}
+            aria-hidden
+          />
+        </span>
       </div>
-      {children ? <div className="mt-4 pl-11">{children}</div> : null}
+      {facts.length > 0 ? (
+        <dl className="mt-3 space-y-1.5">
+          {facts.map(([label, value]) => (
+            <div key={label} className="flex items-baseline justify-between gap-3 text-xs">
+              <dt className="text-zinc-500">{label}</dt>
+              <dd className="truncate font-medium text-zinc-800">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {children}
     </article>
   );
 }
@@ -124,10 +238,14 @@ export default function AdminSettingsPanel({
   isMasterAdmin = false,
   initialAdminProfiles = [],
   initialAccountSettings,
+  maintenanceEnabled,
+  securitySuggestions,
 }: AdminSettingsPanelProps) {
   const router = useRouter();
   const [confirmText, setConfirmText] = useState("");
   const [resetting, setResetting] = useState(false);
+  const [csvPromptOpen, setCsvPromptOpen] = useState(false);
+  const [savingCsv, setSavingCsv] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deletedRecords, setDeletedRecords] = useState(initialDeletedRecords);
@@ -137,6 +255,11 @@ export default function AdminSettingsPanel({
   const [dangerZoneOpen, setDangerZoneOpen] = useState(false);
   const [trashOpen, setTrashOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
+  const [integrationView, setIntegrationView] = useState<IntegrationPublicView | null>(null);
+  const [configService, setConfigService] = useState<IntegrationService | null>(null);
+  const [configDraft, setConfigDraft] = useState<Record<string, string>>({});
+  const [configBusy, setConfigBusy] = useState(false);
+  const [configError, setConfigError] = useState("");
   const [profilesOpen, setProfilesOpen] = useState(false);
   const [dataTransferBusy, setDataTransferBusy] = useState<
     "export" | "import" | null
@@ -308,27 +431,24 @@ export default function AdminSettingsPanel({
     }
   };
 
-  const handleMasterReset = async () => {
-    if (
-      !window.confirm(
-        "This permanently deletes ALL data in the database — clients, drafts, invoices, line items, labor, and notes. This cannot be undone."
-      )
-    ) {
-      return;
-    }
-
+  const handleMasterReset = () => {
     if (confirmText !== "RESET") {
       setError('Type "RESET" to confirm.');
       return;
     }
+    setError(null);
+    setMessage(null);
+    setCsvPromptOpen(true);
+  };
 
+  const runMasterReset = async () => {
     setResetting(true);
     setMessage(null);
     setError(null);
 
     try {
       await masterResetDatabase();
-      setMessage("Database reset complete. All records have been deleted.");
+      setMessage("This dashboard was reset. Other accounts were not changed.");
       setConfirmText("");
       setDeletedRecords([]);
       router.refresh();
@@ -339,11 +459,124 @@ export default function AdminSettingsPanel({
     }
   };
 
+  const handleSaveCsvBackup = async () => {
+    setSavingCsv(true);
+    setError(null);
+    let saved = false;
+    try {
+      saved = await promptSaveCsvExport("all");
+    } catch {
+      setError("Failed to save the CSV backup.");
+      return;
+    } finally {
+      setSavingCsv(false);
+    }
+    if (!saved) return;
+
+    setCsvPromptOpen(false);
+
+    if (
+      !window.confirm(
+        "CSV backup saved. This permanently deletes this dashboard's drafts, clients, invoices, and notes. Other accounts stay. This cannot be undone."
+      )
+    ) {
+      setMessage("CSV backup saved. Database was not reset.");
+      return;
+    }
+
+    await runMasterReset();
+  };
+
+  const handleContinueReset = () => {
+    setCsvPromptOpen(false);
+    if (
+      !window.confirm(
+        "This permanently deletes this dashboard's drafts, clients, invoices, and notes. Other accounts stay. This cannot be undone."
+      )
+    ) {
+      setMessage("Database was not reset.");
+      return;
+    }
+    void runMasterReset();
+  };
+
   const integrationsConnected = [
     isCloudStorageBackend(backend),
     emailConfigured,
     stripeConfigured,
   ].filter(Boolean).length;
+
+  const loadIntegrations = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/integrations", { cache: "no-store" });
+      const body = (await response.json()) as { integrations?: IntegrationPublicView; error?: string };
+      if (response.ok && body.integrations) setIntegrationView(body.integrations);
+    } catch {
+      setConfigError("Could not load connection settings.");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!integrationsOpen) return;
+    void loadIntegrations();
+  }, [integrationsOpen, loadIntegrations]);
+
+  function openIntegrationConfig(service: IntegrationService) {
+    const view = integrationView;
+    setConfigError("");
+    if (configService === service) {
+      setConfigService(null);
+      return;
+    }
+    if (service === "email") {
+      setConfigDraft({
+        host: view?.email.host ?? "",
+        port: view?.email.port || "465",
+        user: view?.email.user ?? "",
+        pass: "",
+        secure: view?.email.secure === false ? "false" : "true",
+      });
+    } else if (service === "sms") {
+      setConfigDraft({
+        accountSid: view?.sms.accountSid ?? "",
+        fromNumber: view?.sms.fromNumber ?? "",
+        authToken: "",
+      });
+    } else if (service === "stripe") {
+      setConfigDraft({ secretKey: "" });
+    } else {
+      setConfigDraft({});
+    }
+    setConfigService(service);
+  }
+
+  async function submitIntegration(action: "save" | "remove") {
+    if (!configService) return;
+    if (action === "remove") {
+      const label = configService === "storage" ? "cloud storage" : configService;
+      if (!window.confirm(`Remove the current ${label} settings and start from scratch?`)) return;
+    }
+    setConfigBusy(true);
+    setConfigError("");
+    try {
+      const response = await fetch("/api/admin/integrations", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ service: configService, action, ...configDraft }),
+      });
+      const body = (await response.json()) as { integrations?: IntegrationPublicView; error?: string };
+      if (!response.ok || !body.integrations) {
+        setConfigError(body.error || "Could not update this connection.");
+        return;
+      }
+      setIntegrationView(body.integrations);
+      setConfigService(null);
+    } catch {
+      setConfigError("Could not update this connection.");
+    } finally {
+      setConfigBusy(false);
+    }
+  }
 
   const loadAdminProfiles = useCallback(async () => {
     if (!isMasterAdmin) return;
@@ -419,7 +652,7 @@ export default function AdminSettingsPanel({
   };
 
   return (
-    <div className="min-h-screen bg-[#eceef1]">
+    <div className="admin-shell admin-shell-flow">
       <AdminHeader
         sidebar={{
           bins,
@@ -430,10 +663,11 @@ export default function AdminSettingsPanel({
           onSelectIntegrations: () =>
             router.push("/admin?view=integrations&from=settings"),
           onSelectCrm: (view) => router.push(`/admin?view=${view}&from=settings`),
+          onSelectTeam: () => router.push("/admin?view=team&from=settings"),
         }}
       />
 
-      <div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[280px_1fr]">
+      <div className="admin-shell-body">
         <AdminSidebar
           bins={bins}
           activeView="home"
@@ -445,9 +679,10 @@ export default function AdminSettingsPanel({
             router.push("/admin?view=integrations&from=settings")
           }
           onSelectCrm={(view) => router.push(`/admin?view=${view}&from=settings`)}
+          onSelectTeam={() => router.push("/admin?view=team&from=settings")}
         />
 
-        <main className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+        <main className="admin-shell-main">
           <div className="space-y-6 p-6">
             <section className="admin-settings-hero">
               <div className="admin-settings-hero-inner">
@@ -534,194 +769,246 @@ export default function AdminSettingsPanel({
               </button>
 
               {integrationsOpen ? (
-                <div className="mt-4 border-t border-zinc-100 pt-4">
-                  <section className="grid gap-4 lg:grid-cols-2">
-              <SettingsCard
-                title="Cloud storage"
-                description="Where quotes, invoices, and catalog data are stored."
-                icon="cloud"
-                connected={isCloudStorageBackend(backend)}
-              >
-                <dl className="grid gap-2 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-zinc-500">Backend</dt>
-                    <dd className="font-medium text-zinc-900">
-                      {getStorageBackendLabel(backend)}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-zinc-500">Active records</dt>
-                    <dd className="font-medium tabular-nums text-zinc-900">
-                      {totalRecords}
-                    </dd>
-                  </div>
-                </dl>
-              </SettingsCard>
-
-              <SettingsCard
-                title="Email delivery"
-                description="HTML invoices sent from admin@overdriveio.com."
-                icon="mail"
-                connected={emailConfigured}
-              >
-                <dl className="grid gap-2 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-zinc-500">Provider</dt>
-                    <dd className="font-medium text-zinc-900">
-                      {emailConfigured
-                        ? (emailProvider ?? "Configured")
-                        : "Not set up"}
-                    </dd>
-                  </div>
-                </dl>
-                {!emailConfigured ? (
-                  <div className="admin-settings-env-block mt-3 text-xs text-zinc-600">
-                    <p className="font-semibold text-zinc-800">
-                      Hostinger SMTP variables
-                    </p>
-                    <ul className="mt-2 space-y-1 font-mono text-[11px] text-zinc-700">
-                      <li>SMTP_HOST=smtp.hostinger.com</li>
-                      <li>SMTP_PORT=465</li>
-                      <li>SMTP_SECURE=true</li>
-                      <li>SMTP_USER=admin@overdriveio.com</li>
-                      <li>SMTP_PASS=your email password</li>
-                    </ul>
-                  </div>
-                ) : null}
-              </SettingsCard>
-
-              <SettingsCard
-                title="SMS delivery"
-                description="Text quotes and invoices to clients via Twilio."
-                icon="mail"
-                connected={smsConfigured}
-              >
-                <dl className="grid gap-2 text-sm">
-                  <div className="flex justify-between gap-4">
-                    <dt className="text-zinc-500">Provider</dt>
-                    <dd className="font-medium text-zinc-900">
-                      {smsConfigured
-                        ? "Twilio"
-                        : "Not set up"}
-                    </dd>
-                  </div>
-                  {twilioFromNumber ? (
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-zinc-500">From number</dt>
-                      <dd className="font-medium text-zinc-900">
-                        {twilioFromNumber}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-                {!smsConfigured ? (
-                  <div className="admin-settings-env-block mt-3 text-xs text-zinc-600">
-                    <p className="font-semibold text-zinc-800">
-                      Twilio environment variables
-                    </p>
-                    <ul className="mt-2 space-y-1 font-mono text-[11px] text-zinc-700">
-                      <li>TWILIO_ACCOUNT_SID=ACxxxxxxxx</li>
-                      <li>TWILIO_AUTH_TOKEN=your auth token</li>
-                      <li>TWILIO_PHONE_NUMBER=+15551234567</li>
-                    </ul>
-                  </div>
-                ) : null}
-              </SettingsCard>
-
-              <SettingsCard
-                title="Stripe payments"
-                description="Checkout links in invoice emails when enabled."
-                icon="credit-card"
-                connected={stripeConfigured}
-              >
-                {!stripeConfigured ? (
-                  <p className="text-xs text-zinc-500">
-                    Add{" "}
-                    <span className="font-mono text-zinc-700">
-                      STRIPE_SECRET_KEY
-                    </span>{" "}
-                    to your environment variables.
-                  </p>
-                ) : (
-                  <p className="text-xs text-emerald-700">
-                    Stripe Checkout is ready for invoice emails.
-                  </p>
-                )}
-              </SettingsCard>
-
-              <article className="admin-settings-card flex flex-col justify-between">
-                <div>
-                  <div className="flex items-start gap-3">
-                    <span className="admin-dash-action-icon mt-0.5 shrink-0">
-                      <AdminIcon name="integrations" size={18} />
-                    </span>
-                    <div>
-                      <h3 className="text-sm font-semibold text-zinc-900">
-                        Integrations hub
-                      </h3>
-                      <p className="mt-1 text-sm text-zinc-500">
-                        View all connection details in one place.
+                <div className="mt-4 space-y-4 border-t border-zinc-100 pt-4">
+                  <div>
+                    <div className="flex items-center justify-between gap-3 text-xs">
+                      <p className="font-semibold uppercase tracking-wide text-zinc-400">
+                        Connections
+                      </p>
+                      <p className="font-semibold text-zinc-700">
+                        {(integrationView
+                          ? [
+                              integrationView.storage.connected,
+                              integrationView.email.connected,
+                              integrationView.sms.connected,
+                              integrationView.stripe.connected,
+                            ]
+                          : [
+                              isCloudStorageBackend(backend),
+                              emailConfigured,
+                              smsConfigured,
+                              stripeConfigured,
+                            ]
+                        ).filter(Boolean).length}{" "}
+                        of 4 live
                       </p>
                     </div>
+                    <div className="mt-2 grid grid-cols-4 gap-1">
+                      {(integrationView
+                        ? [
+                            integrationView.storage.connected,
+                            integrationView.email.connected,
+                            integrationView.sms.connected,
+                            integrationView.stripe.connected,
+                          ]
+                        : [
+                            isCloudStorageBackend(backend),
+                            emailConfigured,
+                            smsConfigured,
+                            stripeConfigured,
+                          ]
+                      ).map((live, index) => (
+                        <span
+                          key={index}
+                          className={`h-1.5 rounded-full ${live ? "bg-[#0780f7]" : "bg-zinc-200"}`}
+                        />
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <Link
-                  href="/admin?view=integrations"
-                  className="btn-outline mt-4 w-full text-xs sm:ml-11 sm:w-auto"
-                >
-                  Open integrations
-                </Link>
-              </article>
 
-              <article className="admin-settings-card flex flex-col justify-between">
-                <div className="flex items-start gap-3">
-                  <span className="admin-dash-action-icon mt-0.5 shrink-0">
-                    <AdminIcon name="folder-open" size={18} />
-                  </span>
-                  <div className="min-w-0">
-                    <h3 className="text-sm font-semibold text-zinc-900">
-                      Data transfer
-                    </h3>
-                    <p className="mt-1 text-xs text-zinc-500">
-                      Export or import dashboard records as CSV.
-                    </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <IntegrationTile
+                      icon="cloud"
+                      title="Cloud storage"
+                      detail="Quotes, invoices, and catalog data"
+                      connected={integrationView ? integrationView.storage.connected : isCloudStorageBackend(backend)}
+                      configOpen={configService === "storage"}
+                      onConfigure={() => openIntegrationConfig("storage")}
+                      facts={[
+                        ["Backend", integrationView?.storage.label ?? getStorageBackendLabel(backend)],
+                        ["Records", String(totalRecords)],
+                      ]}
+                    >
+                      {configService === "storage" ? (
+                        <ConfigPanel
+                          busy={configBusy}
+                          error={configError}
+                          onRemove={() => void submitIntegration("remove")}
+                        >
+                          <p className="text-xs text-zinc-600">
+                            Remove clears this connection from settings. Records already stored stay on the server.
+                          </p>
+                        </ConfigPanel>
+                      ) : null}
+                    </IntegrationTile>
+                    <IntegrationTile
+                      icon="mail"
+                      title="Email"
+                      detail="Invoices from admin@overdriveio.com"
+                      connected={integrationView ? integrationView.email.connected : emailConfigured}
+                      configOpen={configService === "email"}
+                      onConfigure={() => openIntegrationConfig("email")}
+                      facts={[
+                        [
+                          "Provider",
+                          integrationView
+                            ? integrationView.email.provider || "Not set up"
+                            : emailConfigured
+                              ? (emailProvider ?? "Configured")
+                              : "Not set up",
+                        ],
+                      ]}
+                    >
+                      {configService === "email" ? (
+                        <ConfigPanel
+                          busy={configBusy}
+                          error={configError}
+                          onSave={() => void submitIntegration("save")}
+                          onRemove={() => void submitIntegration("remove")}
+                        >
+                          <ConfigField label="Host" value={configDraft.host ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, host: value }))} />
+                          <ConfigField label="Port" value={configDraft.port ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, port: value }))} />
+                          <ConfigField label="Username" value={configDraft.user ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, user: value }))} />
+                          <ConfigField label="Password" secret placeholder={integrationView?.email.hasPassword ? "Saved — leave blank to keep" : "Password"} value={configDraft.pass ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, pass: value }))} />
+                        </ConfigPanel>
+                      ) : !(integrationView ? integrationView.email.connected : emailConfigured) ? (
+                        <SetupLines
+                          title="Hostinger SMTP variables"
+                          lines={[
+                            "SMTP_HOST=smtp.hostinger.com",
+                            "SMTP_PORT=465",
+                            "SMTP_SECURE=true",
+                            "SMTP_USER=admin@overdriveio.com",
+                            "SMTP_PASS=your email password",
+                          ]}
+                        />
+                      ) : null}
+                    </IntegrationTile>
+                    <IntegrationTile
+                      icon="notes"
+                      title="SMS"
+                      detail="Text quotes and invoices via Twilio"
+                      connected={integrationView ? integrationView.sms.connected : smsConfigured}
+                      configOpen={configService === "sms"}
+                      onConfigure={() => openIntegrationConfig("sms")}
+                      facts={[
+                        ["Provider", (integrationView ? integrationView.sms.connected : smsConfigured) ? "Twilio" : "Not set up"],
+                        ...((integrationView?.sms.fromNumber || twilioFromNumber)
+                          ? ([["From", integrationView?.sms.fromNumber || twilioFromNumber || ""]] as Array<[string, string]>)
+                          : []),
+                      ]}
+                    >
+                      {configService === "sms" ? (
+                        <ConfigPanel
+                          busy={configBusy}
+                          error={configError}
+                          onSave={() => void submitIntegration("save")}
+                          onRemove={() => void submitIntegration("remove")}
+                        >
+                          <ConfigField label="Account SID" value={configDraft.accountSid ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, accountSid: value }))} />
+                          <ConfigField label="Auth token" secret placeholder={integrationView?.sms.hasToken ? "Saved — leave blank to keep" : "Auth token"} value={configDraft.authToken ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, authToken: value }))} />
+                          <ConfigField label="From number" value={configDraft.fromNumber ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, fromNumber: value }))} />
+                        </ConfigPanel>
+                      ) : !(integrationView ? integrationView.sms.connected : smsConfigured) ? (
+                        <SetupLines
+                          title="Twilio environment variables"
+                          lines={[
+                            "TWILIO_ACCOUNT_SID=ACxxxxxxxx",
+                            "TWILIO_AUTH_TOKEN=your auth token",
+                            "TWILIO_PHONE_NUMBER=+15551234567",
+                          ]}
+                        />
+                      ) : null}
+                    </IntegrationTile>
+                    <IntegrationTile
+                      icon="credit-card"
+                      title="Stripe"
+                      detail={
+                        (integrationView ? integrationView.stripe.connected : stripeConfigured)
+                          ? "Checkout is ready for invoice emails"
+                          : "Checkout links in invoice emails"
+                      }
+                      connected={integrationView ? integrationView.stripe.connected : stripeConfigured}
+                      configOpen={configService === "stripe"}
+                      onConfigure={() => openIntegrationConfig("stripe")}
+                      facts={[]}
+                    >
+                      {configService === "stripe" ? (
+                        <ConfigPanel
+                          busy={configBusy}
+                          error={configError}
+                          onSave={() => void submitIntegration("save")}
+                          onRemove={() => void submitIntegration("remove")}
+                        >
+                          <ConfigField label="Secret key" secret placeholder={integrationView?.stripe.hasKey ? "Saved — leave blank to keep" : "sk_live_..."} value={configDraft.secretKey ?? ""} onChange={(value) => setConfigDraft((current) => ({ ...current, secretKey: value }))} />
+                        </ConfigPanel>
+                      ) : !(integrationView ? integrationView.stripe.connected : stripeConfigured) ? (
+                        <p className="mt-3 text-xs text-zinc-500">
+                          Add <span className="font-mono text-zinc-700">STRIPE_SECRET_KEY</span> to connect checkout.
+                        </p>
+                      ) : null}
+                    </IntegrationTile>
                   </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2 sm:ml-11">
-                  <button
-                    type="button"
-                    onClick={() => void handleExportCsv()}
-                    disabled={dataTransferBusy !== null || totalRecords === 0}
-                    className="btn-outline px-3 py-1.5 text-xs"
-                  >
-                    {dataTransferBusy === "export" ? "Exporting…" : "Export CSV"}
-                  </button>
-                  <label
-                    className={`btn-outline inline-flex cursor-pointer px-3 py-1.5 text-xs ${
-                      dataTransferBusy !== null
-                        ? "pointer-events-none opacity-50"
-                        : ""
-                    }`}
-                  >
-                    {dataTransferBusy === "import" ? "Importing…" : "Import CSV"}
-                    <input
-                      ref={importInputRef}
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="sr-only"
-                      disabled={dataTransferBusy !== null}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) void handleImportCsv(file);
-                      }}
-                    />
-                  </label>
-                </div>
-              </article>
-                  </section>
+
+                  <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
+                    <div className="flex flex-col justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-3 sm:flex-row sm:items-center">
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-semibold text-zinc-900">Data transfer</h4>
+                        <p className="mt-0.5 text-xs text-zinc-500">
+                          Export or import dashboard records as CSV.
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleExportCsv()}
+                          disabled={dataTransferBusy !== null || totalRecords === 0}
+                          className="btn-outline px-3 py-1.5 text-xs"
+                        >
+                          {dataTransferBusy === "export" ? "Exporting…" : "Export CSV"}
+                        </button>
+                        <label
+                          className={`btn-outline inline-flex cursor-pointer px-3 py-1.5 text-xs ${
+                            dataTransferBusy !== null ? "pointer-events-none opacity-50" : ""
+                          }`}
+                        >
+                          {dataTransferBusy === "import" ? "Importing…" : "Import CSV"}
+                          <input
+                            ref={importInputRef}
+                            type="file"
+                            accept=".csv,text/csv"
+                            className="sr-only"
+                            disabled={dataTransferBusy !== null}
+                            onChange={(event) => {
+                              const file = event.target.files?.[0];
+                              if (file) void handleImportCsv(file);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    </div>
+                    <Link
+                      href="/admin?view=integrations"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-[#f4f8ff] px-4 py-3 text-sm font-semibold text-[#0560b5] hover:border-[#0780f7]"
+                    >
+                      <span>
+                        Integrations hub
+                        <span className="mt-0.5 block text-xs font-normal text-zinc-500">
+                          All connection details
+                        </span>
+                      </span>
+                      <AdminIcon name="chevron-right" size={16} />
+                    </Link>
+                  </div>
                 </div>
               ) : null}
             </section>
+
+            <AdminSecurityCard
+              initialMaintenance={maintenanceEnabled}
+              suggestions={securitySuggestions}
+              canToggle={isMasterAdmin}
+            />
 
             {isMasterAdmin ? (
               <section className="admin-settings-card">
@@ -1035,8 +1322,9 @@ export default function AdminSettingsPanel({
               {dangerZoneOpen ? (
                 <div className="mt-4 border-t border-red-100 pt-4 pl-12">
                   <p className="text-sm text-zinc-600">
-                    Master reset wipes the entire database, trash, and local
-                    saved drafts on this device.
+                    Master reset deletes this dashboard's drafts, clients,
+                    invoices, and notes, plus trash and local drafts on this
+                    device. Other accounts stay.
                   </p>
 
                   <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
@@ -1068,6 +1356,50 @@ export default function AdminSettingsPanel({
                 </div>
               ) : null}
             </section>
+
+            {csvPromptOpen ? (
+              <div className="fixed inset-0 z-50 grid place-items-center bg-zinc-950/40 p-4">
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="reset-csv-title"
+                  className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl"
+                >
+                  <h3 id="reset-csv-title" className="text-base font-semibold text-zinc-900">
+                    Save a CSV backup
+                  </h3>
+                  <p className="mt-2 text-sm text-zinc-600">
+                    Save a CSV of this dashboard before the reset continues. Other accounts stay.
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="rounded-md border border-zinc-200 px-3 py-2 text-sm font-semibold text-zinc-700"
+                      onClick={() => setCsvPromptOpen(false)}
+                      disabled={savingCsv}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md bg-[#0780f7] px-3 py-2 text-sm font-semibold text-white disabled:opacity-60"
+                      onClick={() => void handleSaveCsvBackup()}
+                      disabled={savingCsv || resetting}
+                    >
+                      {savingCsv ? "Saving…" : "Save CSV"}
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-60"
+                      onClick={handleContinueReset}
+                      disabled={savingCsv || resetting}
+                    >
+                      {resetting ? "Resetting…" : "Reset"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
         </main>
       </div>

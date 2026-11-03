@@ -225,6 +225,62 @@ export async function savePortalBilling(input: {
   return { error: "" };
 }
 
+function csvCell(value: unknown): string {
+  const text = String(value ?? "");
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+export async function exportPortalRosterCsv(): Promise<{ error: string; csv?: string }> {
+  const account = await getPortalAccount();
+  if (!account) return { error: "Sign in required." };
+  const lines = ["category,name,detail,status"];
+  if (!account.clientId) return { error: "", csv: `${lines.join("\n")}\n` };
+  const supabase = crmClient();
+  const { data: opportunities, error: opportunityError } = await supabase
+    .from("opportunities")
+    .select("title, stage")
+    .eq("client_id", account.clientId);
+  if (opportunityError) return { error: "Could not export this account." };
+  for (const row of opportunities ?? []) {
+    lines.push(["job", row.title, "", row.stage].map(csvCell).join(","));
+  }
+  const { data: projects, error: projectError } = await supabase
+    .from("projects")
+    .select("name, stage, order_id")
+    .eq("client_id", account.clientId);
+  if (projectError) return { error: "Could not export this account." };
+  const orderIds = (projects ?? []).map((row) => String(row.order_id ?? "")).filter(Boolean);
+  for (const row of projects ?? []) {
+    lines.push(["project", row.name, "", row.stage].map(csvCell).join(","));
+  }
+  if (orderIds.length > 0) {
+    const { data: invoices, error: invoiceError } = await supabase
+      .from("invoices")
+      .select("document_number, kind, status, total_cents")
+      .in("order_id", orderIds);
+    if (invoiceError) return { error: "Could not export this account." };
+    for (const row of invoices ?? []) {
+      lines.push(
+        ["invoice", row.document_number, row.kind, row.status].map(csvCell).join(",")
+      );
+    }
+  }
+  return { error: "", csv: `${lines.join("\n")}\n` };
+}
+
+export async function resetClientPortal(): Promise<SettingsResult> {
+  const account = await getPortalAccount();
+  if (!account) return { error: "Sign in required." };
+  const { error } = await crmClient().rpc("reset_portal_account", {
+    p_user_id: account.id,
+  });
+  if (error) return { error: "Could not reset this account." };
+  revalidatePath("/portal");
+  revalidatePath("/portal/settings");
+  return { error: "" };
+}
+
 export async function saveDeletionRequest(input: {
   currentPassword: string;
 }): Promise<SettingsResult> {

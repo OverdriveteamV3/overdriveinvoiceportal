@@ -20,7 +20,7 @@ const HEADER_LINKS = [
 ] as const;
 
 export default function AdminHeader({
-  title = "Dashboard",
+  title = "Admin Dashboard",
   sidebar,
 }: AdminHeaderProps) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -105,7 +105,10 @@ export default function AdminHeader({
             <AdminIcon name="chevron-left" size={14} />
             Back to website
           </Link>
-          <h1 className="truncate">{title}</h1>
+          <div className="admin-header-title">
+            <h1 className="truncate">{title}</h1>
+            <AdminProfileTag />
+          </div>
         </div>
 
         <div className="flex min-w-0 flex-1 items-center justify-between gap-3 lg:flex-none lg:justify-end">
@@ -114,14 +117,13 @@ export default function AdminHeader({
               <AdminIcon name="chevron-left" size={14} />
               Back to website
             </Link>
-            <h1 className="truncate text-base">{title}</h1>
+            <div className="admin-header-title">
+              <h1 className="truncate">{title}</h1>
+              <AdminProfileTag />
+            </div>
           </div>
 
           <div className="flex shrink-0 items-center gap-2">
-            <span className="hidden lg:inline-flex">
-              <AdminProfileTag />
-            </span>
-
             <nav className="hidden items-center gap-2 lg:flex">
               {HEADER_LINKS.map((link) => (
                 <Link key={link.href} href={link.href} className="btn-outline text-xs">

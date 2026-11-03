@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import type { CrmView } from "@/components/admin/admin-nav";
+import Link from "next/link";
+import { adminViewPath, type CrmView } from "@/components/admin/admin-nav";
 import AdminSupportPanel from "@/components/admin/AdminSupportPanel";
+import { formatPhoneNumber } from "@/lib/client-form";
 import { formatCents, budgetMeter } from "@/lib/crm/money";
 import { revisionMeter } from "@/lib/crm/revisions";
 import {
@@ -28,6 +30,8 @@ type Opportunity = {
   owner_profile_id: string;
   archived_at: string | null;
   service_interest: string;
+  campaign?: string;
+  description?: string;
   created_at: string;
   updated_at: string;
   clients?: { display_name?: string; company_name?: string; email?: string } | null;
@@ -49,13 +53,21 @@ export default function AdminCrmPanel({ view }: { view: CrmView }) {
   const [tasks, setTasks] = useState<Array<Record<string, unknown>>>([]);
   const [budgets, setBudgets] = useState<Array<Record<string, unknown>>>([]);
   const [listMode, setListMode] = useState(false);
+  const [totals, setTotals] = useState<PipelineTotals | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      if (view === "pipeline") {
-        setOpportunities((await readJson(await fetch("/api/crm/opportunities"))).opportunities ?? []);
+      if (view === "pipeline" || view === "prospects") {
+        const [opportunityBody, overviewBody] = await Promise.all([
+          readJson(await fetch("/api/crm/opportunities")),
+          view === "pipeline"
+            ? fetch("/api/crm/overview").then((response) => (response.ok ? response.json() : null))
+            : Promise.resolve(null),
+        ]);
+        setOpportunities(opportunityBody.opportunities ?? []);
+        setTotals(overviewBody);
       } else if (view === "orders") {
         setOrders((await readJson(await fetch("/api/crm/orders"))).orders ?? []);
       } else if (view === "projects") {
@@ -111,9 +123,17 @@ export default function AdminCrmPanel({ view }: { view: CrmView }) {
       ) : null}
       {loading ? <p className="text-sm text-zinc-500">Loading…</p> : null}
 
+      {!loading && view === "prospects" ? (
+        <Prospects
+          opportunities={opportunities}
+          onCreate={(body) => post("/api/crm/opportunities", body)}
+        />
+      ) : null}
+
       {!loading && view === "pipeline" ? (
         <Pipeline
           opportunities={opportunities}
+          totals={totals}
           listMode={listMode}
           onToggle={() => setListMode((value) => !value)}
           onCreate={(body) => post("/api/crm/opportunities", body)}
@@ -186,14 +206,305 @@ function daysInStage(updatedAt: string) {
   return Math.max(0, Math.floor((Date.now() - new Date(updatedAt).getTime()) / 86400000));
 }
 
+const SOCIAL_PLATFORMS = [
+  ["instagram", "Instagram"],
+  ["tiktok", "TikTok"],
+  ["x", "X"],
+  ["snapchat", "Snapchat"],
+  ["youtube", "YouTube"],
+  ["linkedin", "LinkedIn"],
+] as const;
+
+const EXECUTION_OPTIONS = [
+  { value: "great", label: "Great", tag: "border-green-200 bg-green-100 text-green-800" },
+  { value: "ok", label: "Ok", tag: "border-blue-200 bg-blue-100 text-blue-800" },
+  { value: "unknown", label: "Unknown", tag: "border-orange-200 bg-orange-100 text-orange-800" },
+] as const;
+
+type ExecutionRating = (typeof EXECUTION_OPTIONS)[number]["value"];
+
+function executionFromDescription(description: string) {
+  const match = /^execution:(great|ok|unknown)\b/.exec(description.trim());
+  return match ? (match[1] as ExecutionRating) : null;
+}
+
+function ExecutionMenu({
+  value,
+  onChange,
+}: {
+  value: ExecutionRating;
+  onChange: (value: ExecutionRating) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = EXECUTION_OPTIONS.find((option) => option.value === value) ?? EXECUTION_OPTIONS[2];
+
+  return (
+    <div className="relative mt-1">
+      <button
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+        className={`flex w-full items-center justify-between rounded-full border px-3 py-2 text-left text-[13px] font-semibold ${current.tag}`}
+      >
+        {current.label}
+        <span aria-hidden className="text-[10px]">▼</span>
+      </button>
+      {open ? (
+        <ul role="listbox" aria-label="Probable execution" className="absolute z-10 mt-1 w-full space-y-1 rounded-lg border border-zinc-200 bg-white p-1 shadow-lg">
+          {EXECUTION_OPTIONS.map((option) => (
+            <li key={option.value}>
+              <button
+                type="button"
+                role="option"
+                aria-selected={option.value === value}
+                className={`w-full rounded-full border px-3 py-1.5 text-left text-[13px] font-semibold ${option.tag}`}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                {option.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <input type="hidden" name="execution" value={value} />
+    </div>
+  );
+}
+
+function prospectSourceLabel(source: string, campaign: string) {
+  if (source === "website" && campaign) return `Search · ${campaign}`;
+  if (source === "social") {
+    const [platform, ...rest] = campaign.split(" ");
+    const name = SOCIAL_PLATFORMS.find(([value]) => value === platform)?.[1] ?? "Social media";
+    const handle = rest.join(" ");
+    return handle ? `${name} · ${handle}` : name;
+  }
+  if (source === "referral") {
+    const channel = campaign === "email" ? "Email" : "Phone";
+    return `Referral · ${channel}`;
+  }
+  return SOURCE_LABELS[source] ?? source;
+}
+
+function Prospects({
+  opportunities,
+  onCreate,
+}: {
+  opportunities: Opportunity[];
+  onCreate: (body: Record<string, string>) => void;
+}) {
+  const prospects = opportunities.filter((row) => !row.archived_at && row.stage === "new_lead");
+  const [sourceKind, setSourceKind] = useState<"search" | "social" | "referral">("search");
+  const [execution, setExecution] = useState<ExecutionRating>("unknown");
+  const [phone, setPhone] = useState("");
+
+  return (
+    <div className="space-y-5">
+      <form
+        className="rounded-xl border border-zinc-200 bg-zinc-50 p-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const kind = String(form.get("sourceKind") ?? "search");
+          let source = "website";
+          let campaign = "";
+          if (kind === "social") {
+            source = "social";
+            const platform = String(form.get("platform") ?? "instagram");
+            let handle = String(form.get("handle") ?? "").trim();
+            if (handle && !handle.startsWith("@")) handle = `@${handle}`;
+            campaign = [platform, handle].filter(Boolean).join(" ");
+          } else if (kind === "referral") {
+            source = "referral";
+            campaign = String(form.get("referralChannel") ?? "phone") === "email" ? "email" : "phone";
+          } else {
+            source = "website";
+            campaign = String(form.get("searchQuery") ?? "").trim();
+          }
+          onCreate({
+            displayName: String(form.get("displayName") ?? ""),
+            companyName: String(form.get("companyName") ?? ""),
+            title: String(form.get("title") ?? ""),
+            email: String(form.get("email") ?? ""),
+            phone: String(form.get("phone") ?? ""),
+            source,
+            campaign,
+            serviceInterest: String(form.get("serviceInterest") ?? ""),
+            description: `execution:${String(form.get("execution") ?? "unknown")}`,
+            nextAction: "Qualify this potential job",
+          });
+          event.currentTarget.reset();
+          setSourceKind("search");
+          setExecution("unknown");
+          setPhone("");
+        }}
+      >
+        <h3 className="text-sm font-semibold text-zinc-900">Add a potential job</h3>
+        <p className="mt-1 text-xs text-zinc-500">
+          Agents use this for work that is not a project yet. It starts in the pipeline as a new lead.
+        </p>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <label className="text-xs font-medium text-zinc-600">
+            Name
+            <input name="displayName" required className="field mt-1" placeholder="Alex Rivera" />
+          </label>
+          <label className="text-xs font-medium text-zinc-600">
+            Company
+            <input name="companyName" className="field mt-1" placeholder="Northline" />
+          </label>
+          <label className="text-xs font-medium text-zinc-600">
+            Potential job
+            <input name="title" required className="field mt-1" placeholder="Website redesign" />
+          </label>
+          <label className="text-xs font-medium text-zinc-600">
+            Email
+            <input name="email" type="email" className="field mt-1" placeholder="name@company.com" />
+          </label>
+          <label className="text-xs font-medium text-zinc-600">
+            Phone
+            <input
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              className="field mt-1"
+              placeholder="(555) 555-5555"
+              value={phone}
+              onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
+            />
+          </label>
+          <label className="text-xs font-medium text-zinc-600">
+            Source
+            <select
+              name="sourceKind"
+              className="field mt-1"
+              value={sourceKind}
+              onChange={(event) => setSourceKind(event.target.value as "search" | "social" | "referral")}
+            >
+              <option value="search">Search</option>
+              <option value="social">Social media</option>
+              <option value="referral">Referral</option>
+            </select>
+          </label>
+          {sourceKind === "search" ? (
+            <label className="text-xs font-medium text-zinc-600 md:col-span-2">
+              Google search
+              <input
+                name="searchQuery"
+                required
+                className="field mt-1"
+                placeholder="www.example.com or keyword"
+              />
+            </label>
+          ) : null}
+          {sourceKind === "social" ? (
+            <>
+              <label className="text-xs font-medium text-zinc-600">
+                Platform
+                <select name="platform" className="field mt-1" defaultValue="instagram">
+                  {SOCIAL_PLATFORMS.map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-xs font-medium text-zinc-600">
+                Handle
+                <input name="handle" required className="field mt-1" placeholder="@handle" />
+              </label>
+            </>
+          ) : null}
+          {sourceKind === "referral" ? (
+            <label className="text-xs font-medium text-zinc-600 md:col-span-2">
+              Referral source
+              <select name="referralChannel" className="field mt-1" defaultValue="phone">
+                <option value="phone">Phone</option>
+                <option value="email">Email</option>
+              </select>
+            </label>
+          ) : null}
+          <div className="text-xs font-medium text-zinc-600">
+            Probable execution
+            <ExecutionMenu value={execution} onChange={setExecution} />
+          </div>
+        </div>
+        <label className="mt-3 block text-xs font-medium text-zinc-600">
+          Service
+          <input name="serviceInterest" className="field mt-1" placeholder="Website Development" />
+        </label>
+        <button className="btn mt-3 text-xs" type="submit">Add potential job</button>
+      </form>
+
+      {prospects.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-8 text-center text-sm text-zinc-500">
+          No potential jobs yet.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {prospects.map((row) => (
+            <li key={row.id} className="rounded-xl border border-zinc-200 bg-white px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-zinc-900">
+                    {row.clients?.display_name || "Client"}
+                  </p>
+                  <p className="truncate text-sm text-zinc-600">{row.title}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  {executionFromDescription(row.description ?? "") ? (
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        EXECUTION_OPTIONS.find((option) => option.value === executionFromDescription(row.description ?? ""))?.tag
+                      }`}
+                    >
+                      {EXECUTION_OPTIONS.find((option) => option.value === executionFromDescription(row.description ?? ""))?.label}
+                    </span>
+                  ) : null}
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-400">
+                    {prospectSourceLabel(row.source, row.campaign ?? "")}
+                  </p>
+                </div>
+              </div>
+              <p className="mt-1 truncate text-xs text-zinc-500">
+                {[row.clients?.company_name, row.clients?.email, row.service_interest].filter(Boolean).join(" · ") || "New lead"}
+              </p>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+type PipelineTotals = {
+  openPipelineCents: number;
+  invoicedCents: number;
+  netCollectedCents: number;
+  overdueCents: number;
+  openTasks: number;
+  projects: number;
+};
+
+function pipelineLane(stage: string): "submission" | "accepted" | "negotiate" | "declined" {
+  if (stage === "negotiation") return "negotiate";
+  if (stage === "closed_lost") return "declined";
+  if (stage === "new_lead" || stage === "quote_preparation" || stage === "quote_sent") return "submission";
+  return "accepted";
+}
+
 function Pipeline({
   opportunities,
+  totals,
   listMode,
   onToggle,
   onCreate,
   onStage,
 }: {
   opportunities: Opportunity[];
+  totals: PipelineTotals | null;
   listMode: boolean;
   onToggle: () => void;
   onCreate: (body: Record<string, string>) => void;
@@ -205,25 +516,6 @@ function Pipeline({
   const today = new Date().toISOString().slice(0, 10);
   const followUps = open.filter((row) => row.follow_up_on && row.follow_up_on <= today).length;
   const stale = open.filter((row) => daysInStage(row.updated_at) >= 7).length;
-  const stageRows = SALES_STAGES.map((stage) => {
-    const rows = open.filter((item) => item.stage === stage);
-    return {
-      stage,
-      count: rows.length,
-      value: rows.reduce((sum, item) => sum + item.estimated_value_cents, 0),
-    };
-  });
-  const maxCount = Math.max(1, ...stageRows.map((row) => row.count));
-  const [selected, setSelected] = useState<SalesStage>(
-    stageRows.find((row) => row.count > 0)?.stage ?? "new_lead"
-  );
-  const selectedRows = open.filter((row) => row.stage === selected);
-  const sources = Object.entries(
-    pipeline.reduce<Record<string, number>>((counts, row) => {
-      counts[row.source] = (counts[row.source] ?? 0) + 1;
-      return counts;
-    }, {})
-  ).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="space-y-5">
@@ -246,6 +538,36 @@ function Pipeline({
           detail="Unchanged in the current stage."
           meter={open.length === 0 ? 0 : Math.round((stale / open.length) * 100)}
         />
+        {totals ? (
+          <>
+            <DashboardStat
+              label="Open pipeline"
+              value={formatCents(totals.openPipelineCents)}
+              detail="Estimates, not revenue"
+            />
+            <DashboardStat
+              label="Invoiced"
+              value={formatCents(totals.invoicedCents)}
+              detail="Issued CRM invoices"
+            />
+            <DashboardStat
+              label="Net collected"
+              value={formatCents(totals.netCollectedCents)}
+              detail="Succeeded payments minus refunds"
+            />
+            <DashboardStat
+              label="Overdue"
+              value={formatCents(totals.overdueCents)}
+              detail="Outstanding past due"
+            />
+            <DashboardStat
+              label="Projects"
+              value={String(totals.projects)}
+              detail={`${totals.openTasks} open tasks`}
+              href={adminViewPath("projects", "pipeline")}
+            />
+          </>
+        ) : null}
       </div>
 
       <form
@@ -326,80 +648,71 @@ function Pipeline({
           ))}
         </ul>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
-          <div className="rounded-xl border border-zinc-200 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Stage funnel</p>
-            <p className="mt-1 text-[11px] text-zinc-500">Bar length is the number of leads. The amount is the estimate.</p>
-            <div className="mt-3 space-y-1">
-              {stageRows.map((row, index) => {
-                const width = row.count === 0 ? 0 : Math.max(12, Math.round((row.count / maxCount) * 100));
-                const decision = row.stage === "accepted_pending";
-                return (
-                  <div key={row.stage}>
-                    {decision ? (
-                      <p className="mb-1 mt-3 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">After acceptance</p>
-                    ) : null}
-                    <button
-                      type="button"
-                      onClick={() => setSelected(row.stage)}
-                      aria-pressed={selected === row.stage}
-                      className={`w-full rounded-md px-1.5 py-1 text-left ${selected === row.stage ? "bg-zinc-100" : "hover:bg-zinc-50"}`}
-                    >
-                      <span className="flex items-start justify-between gap-2 text-[11px] leading-tight">
-                        <span className="min-w-0 font-medium text-zinc-800">{index + 1}. {SALES_STAGE_LABELS[row.stage]}</span>
-                        <span className="shrink-0 tabular-nums text-zinc-500">{row.count}</span>
-                      </span>
-                      <span className="mt-1 block h-1.5 rounded-full bg-zinc-100" aria-hidden>
-                        <span className="block h-1.5 rounded-full bg-zinc-900" style={{ width: `${width}%` }} />
-                      </span>
-                      <span className="mt-0.5 block text-[10px] text-zinc-500">{formatCents(row.value)}</span>
-                    </button>
+        <div className="grid gap-3 xl:grid-cols-4">
+          {(
+            [
+              ["submission", "New submissions", "border-blue-200 bg-blue-50"],
+              ["accepted", "Accepted", "border-emerald-200 bg-emerald-50"],
+              ["negotiate", "Negotiate", "border-amber-200 bg-amber-50"],
+              ["declined", "Declined", "border-zinc-200 bg-zinc-50"],
+            ] as const
+          ).map(([lane, label, tone]) => {
+            const rows = open.filter((row) => pipelineLane(row.stage) === lane);
+            return (
+              <section key={lane} className={`rounded-xl border p-3 ${tone}`}>
+                <div className="mb-3 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-zinc-900">{label}</h3>
+                  <span className="text-xs font-semibold text-zinc-500">{rows.length}</span>
+                </div>
+                {rows.length === 0 ? (
+                  <p className="text-xs text-zinc-500">Nothing in this lane.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {rows.map((row) => (
+                      <article key={row.id} className="rounded-lg border border-white bg-white p-3 text-sm">
+                        <p className="font-semibold text-zinc-900">{row.clients?.display_name || "Client"}</p>
+                        <p className="truncate text-zinc-600">{row.title}</p>
+                        <p className="mt-1 text-[11px] text-zinc-500">
+                          {row.stage === "quote_sent" ? "Quoted" : SALES_STAGE_LABELS[row.stage]}
+                        </p>
+                      </article>
+                    ))}
                   </div>
-                );
-              })}
-            </div>
-            {sources.length > 0 ? (
-              <div className="mt-4 border-t border-zinc-100 pt-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">Where open leads came from</p>
-                <ul className="mt-2 space-y-1.5">
-                  {sources.map(([source, count]) => (
-                    <li key={source} className="grid grid-cols-[72px_1fr_16px] items-center gap-2 text-[11px] text-zinc-600">
-                      <span>{SOURCE_LABELS[source] ?? source}</span>
-                      <span className="h-1.5 rounded-full bg-zinc-100" aria-hidden>
-                        <span
-                          className="block h-1.5 rounded-full bg-blue-700"
-                          style={{ width: `${Math.max(8, Math.round((count / Math.max(pipeline.length, 1)) * 100))}%` }}
-                        />
-                      </span>
-                      <span className="tabular-nums text-right">{count}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </div>
-          <div className="min-w-0">
-            <div className="mb-2 flex items-baseline justify-between gap-3">
-              <h3 className="text-sm font-semibold text-zinc-900">{SALES_STAGE_LABELS[selected]}</h3>
-              <p className="text-xs text-zinc-500">
-                {selectedRows.length === 1 ? "1 lead" : `${selectedRows.length} leads`}
-              </p>
-            </div>
-            {selectedRows.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500">
-                Nothing in this stage. Choose another bar, or add a prospect.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {selectedRows.map((row) => (
-                  <OpportunityCard key={row.id} row={row} onStage={onStage} />
-                ))}
-              </div>
-            )}
-          </div>
+                )}
+              </section>
+            );
+          })}
         </div>
       )}
     </div>
+  );
+}
+
+function DashboardStat({
+  label,
+  value,
+  detail,
+  href,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-zinc-900">{value}</p>
+      <p className="text-xs text-zinc-500">{detail}</p>
+    </>
+  );
+  if (!href) {
+    return <article className="rounded-lg border border-zinc-200 bg-white p-4">{body}</article>;
+  }
+  return (
+    <Link href={href} className="rounded-lg border border-zinc-200 bg-white p-4 transition hover:border-zinc-400">
+      {body}
+    </Link>
   );
 }
 

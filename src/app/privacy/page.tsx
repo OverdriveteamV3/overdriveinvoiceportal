@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { publicMaintenancePage } from "@/components/home/public-maintenance";
 import PolicyDocument from "@/components/home/PolicyDocument";
 import { getLocale } from "@/lib/get-locale";
 import { policyDocs } from "@/lib/policy-docs";
@@ -9,6 +10,8 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function PrivacyPage() {
+  const down = await publicMaintenancePage();
+  if (down) return down;
   const locale = await getLocale();
   const doc = policyDocs(locale).privacy;
   return (

@@ -1,6 +1,7 @@
 import { DATA_BINS, isDataBinId, type DataBinId } from "@/lib/storage/dataBins";
 
 export const CRM_VIEWS = [
+  "prospects",
   "pipeline",
   "orders",
   "projects",
@@ -16,6 +17,7 @@ export function isCrmView(view: AdminView): view is CrmView {
 }
 
 export const CRM_NAV: Array<{ id: CrmView; label: string; description: string }> = [
+  { id: "prospects", label: "Prospects", description: "Potential jobs to qualify" },
   { id: "pipeline", label: "Pipeline", description: "Leads and open opportunities" },
   { id: "orders", label: "Orders", description: "Accepted scope and agreements" },
   { id: "projects", label: "Projects", description: "Delivery, onboarding, and revisions" },
@@ -24,7 +26,7 @@ export const CRM_NAV: Array<{ id: CrmView; label: string; description: string }>
   { id: "messages", label: "Messages & Alerts", description: "Support chat and online status" },
 ];
 
-export type AdminView = DataBinId | "integrations" | "home" | CrmView;
+export type AdminView = DataBinId | "integrations" | "home" | CrmView | "team";
 
 export type AdminNavGroup = {
   title: string;
@@ -47,7 +49,7 @@ export const ADMIN_NAV_GROUPS: AdminNavGroup[] = [
 ];
 
 export function isDataBinView(view: AdminView): view is DataBinId {
-  return view !== "integrations" && view !== "home" && !isCrmView(view);
+  return view !== "integrations" && view !== "home" && view !== "team" && !isCrmView(view);
 }
 
 export type DocumentBinId = Extract<DataBinId, "documents" | "quotes" | "drafts">;
@@ -58,7 +60,7 @@ export function isDocumentBin(binId: DataBinId): binId is DocumentBinId {
 
 export function parseAdminView(value: string | undefined): AdminView {
   if (!value) return "home";
-  if (value === "home" || value === "integrations") return value;
+  if (value === "home" || value === "integrations" || value === "team") return value;
   if (value === "payments" || value === "budgets") return "wallet";
   if ((CRM_VIEWS as readonly string[]).includes(value)) return value as CrmView;
   if (isDataBinId(value)) return value;
@@ -73,7 +75,7 @@ export function parseAdminReturnFrom(
   if (!value) return null;
   if (value === "dashboard" || value === "settings") return value;
   if (value === "home") return "dashboard";
-  if (value === "integrations") return value;
+  if (value === "integrations" || value === "team") return value;
   if (value === "payments" || value === "budgets") return "wallet";
   if ((CRM_VIEWS as readonly string[]).includes(value)) return value as CrmView;
   if (isDataBinId(value)) return value;
@@ -100,6 +102,7 @@ export function adminReturnLabel(from: AdminReturnFrom): string {
   if (from === "settings") return "Settings";
   if (from === "dashboard") return "Dashboard";
   if (from === "integrations") return "Integrations";
+  if (from === "team") return "Team";
   if (isCrmView(from)) {
     return CRM_NAV.find((item) => item.id === from)?.label ?? "Workspace";
   }

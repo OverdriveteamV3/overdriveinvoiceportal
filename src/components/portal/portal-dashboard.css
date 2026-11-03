@@ -2437,6 +2437,54 @@ a.od-history-line:hover .od-history-name > span {
   color: #9f1d14 !important;
 }
 
+.od-settings-reset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.od-settings-reset .od-settings-field {
+  flex: 1 1 220px;
+  margin: 0;
+}
+
+.od-settings-reset .od-settings-danger {
+  margin-top: 0;
+  border-color: transparent !important;
+  background: #dc2626 !important;
+  color: #fff !important;
+}
+
+.od-settings-reset .od-settings-danger:disabled,
+.od-settings-reset-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.od-settings-reset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.od-settings-reset-actions button {
+  margin-top: 0;
+}
+
+.od-settings-reset-actions .od-settings-reset-save {
+  border-color: transparent;
+  background: var(--od-accent, var(--od-blue));
+  color: #fff;
+}
+
+.od-settings-reset-actions .od-settings-danger {
+  border-color: transparent !important;
+  background: #dc2626 !important;
+  color: #fff !important;
+}
+
 .od-settings-save {
   display: flex;
   flex-wrap: wrap;

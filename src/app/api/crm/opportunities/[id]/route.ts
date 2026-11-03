@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { archiveOpportunity, addTask, setOpportunityStage } from "@/lib/crm/db";
+import { archiveOpportunity, addTask, decideSubmission, setOpportunityStage, updateSubmission } from "@/lib/crm/db";
 import { crmError, requireCrmAdmin } from "@/lib/crm/http";
 import { isSalesStage } from "@/lib/crm/stages";
 
@@ -11,7 +11,19 @@ export async function POST(request: Request, { params }: Params) {
   const { id } = await params;
   const body = await request.json();
   try {
-    if (body.action === "stage") {
+    if (body.action === "decide") {
+      const decision = body.decision === "accept" || body.decision === "decline" ? body.decision : "";
+      if (!decision) {
+        return NextResponse.json({ error: "Choose accept or decline." }, { status: 400 });
+      }
+      await decideSubmission({
+        opportunityId: id,
+        profileId: profile.profileId,
+        actor: profile.username,
+        decision,
+        memo: String(body.memo ?? ""),
+      });
+    } else if (body.action === "stage") {
       if (!isSalesStage(String(body.stage ?? ""))) {
         return NextResponse.json({ error: "Unknown stage." }, { status: 400 });
       }
@@ -33,6 +45,26 @@ export async function POST(request: Request, { params }: Params) {
         actor: profile.username,
         reason,
         reopen: body.action === "reopen",
+      });
+    } else if (body.action === "update") {
+      const title = String(body.title ?? "").trim();
+      const name = String(body.name ?? "").trim();
+      if (!title || !name) {
+        return NextResponse.json({ error: "Name and project title are required." }, { status: 400 });
+      }
+      await updateSubmission({
+        opportunityId: id,
+        profileId: profile.profileId,
+        name,
+        company: String(body.company ?? ""),
+        title,
+        service: String(body.service ?? ""),
+        budget: String(body.budget ?? ""),
+        timeline: String(body.timeline ?? ""),
+        contact: String(body.contact ?? ""),
+        email: String(body.email ?? ""),
+        phone: String(body.phone ?? ""),
+        website: String(body.website ?? ""),
       });
     } else if (body.action === "task") {
       const task = String(body.body ?? "").trim();

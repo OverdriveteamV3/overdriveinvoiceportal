@@ -23,7 +23,8 @@ export type AdminIconName =
   | "credit-card"
   | "eye"
   | "eye-off"
-  | "menu";
+  | "menu"
+  | "shield";
 
 export type DataBinIconName = Extract<
   AdminIconName,

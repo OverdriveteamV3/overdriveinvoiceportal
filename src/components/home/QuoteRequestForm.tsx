@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { submitQuoteRequest } from "@/app/quote/actions";
 import { signOutAccount } from "@/app/sign-in/actions";
 import LanguageToggle from "@/components/home/LanguageToggle";
+import QuoteOnboarding from "@/components/home/QuoteOnboarding";
 import { formatPhoneNumber } from "@/lib/client-form";
 import type { Locale } from "@/lib/locale";
 
@@ -35,28 +35,39 @@ const QUOTE_ERRORS: Record<string, string> = {
 export default function QuoteRequestForm({
   defaults,
   locale = "en",
+  resumeStep = 0,
+  notice = "",
 }: {
   defaults?: { name?: string; email?: string; service?: string; plan?: string };
   locale?: Locale;
+  resumeStep?: number;
+  notice?: string;
 }) {
   const [saving, setSaving] = useState(false);
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const [phone, setPhone] = useState("");
   const [websiteHost, setWebsiteHost] = useState("");
+  const [step, setStep] = useState(resumeStep);
   const es = locale === "es";
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
-    const result = await submitQuoteRequest(new FormData(event.currentTarget));
+    const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
+    const response = await fetch("/api/onboarding/intake", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const result = (await response.json()) as { error?: string };
     setSaving(false);
-    if (result.ok) {
-      setSent(true);
+    if (!response.ok) {
+      const message = result.error || "Could not start onboarding.";
+      setError(es ? QUOTE_ERRORS[message] ?? message : message);
       return;
     }
-    setError(es ? QUOTE_ERRORS[result.error] ?? result.error : result.error);
+    setStep(1);
   }
 
   return (
@@ -85,18 +96,8 @@ export default function QuoteRequestForm({
             : "A few details are enough for a clear scope, timeline, and quote. We will follow up using the contact method you choose."}
         </p>
 
-        {sent ? (
-          <div className="quote-success" role="status">
-            <h2>{es ? "Solicitud recibida." : "Request received."}</h2>
-            <p>
-              {es
-                ? "Tenemos los detalles del proyecto y te contactaremos pronto."
-                : "We have your project details and will be in touch shortly."}
-            </p>
-            <Link href="/" className="quote-button">
-              {es ? "Volver al inicio" : "Back to Home"}
-            </Link>
-          </div>
+        {step > 0 ? (
+          <QuoteOnboarding locale={locale} initialStep={step} notice={notice} />
         ) : (
           <form onSubmit={onSubmit}>
             <fieldset>
@@ -220,7 +221,7 @@ export default function QuoteRequestForm({
 
             <fieldset>
               <legend>{es ? "Plazo y presupuesto" : "Timeline and budget"}</legend>
-              <div className="quote-grid">
+              <div className="quote-grid quote-grid-3">
                 <label>
                   {es ? "Plazo" : "Timeline"}
                   <select name="timeline" defaultValue="Flexible">
@@ -239,11 +240,11 @@ export default function QuoteRequestForm({
                     <option>$1,000-$1,000+</option>
                   </select>
                 </label>
+                <label>
+                  {es ? "Fecha objetivo" : "Target launch"}
+                  <input name="launchDate" type="date" />
+                </label>
               </div>
-              <label>
-                {es ? "Fecha objetivo" : "Target launch"}
-                <input name="launchDate" type="date" />
-              </label>
             </fieldset>
 
             {error ? (
@@ -253,7 +254,7 @@ export default function QuoteRequestForm({
             ) : null}
 
             <button className="quote-button" type="submit" disabled={saving}>
-              {saving ? (es ? "Enviando…" : "Sending…") : es ? "Enviar solicitud" : "Submit request"}
+              {saving ? (es ? "Guardando…" : "Saving…") : "Next"}
             </button>
           </form>
         )}
@@ -337,6 +338,7 @@ export default function QuoteRequestForm({
         }
         .quote-page label { display: block; margin-top: 14px; font-size: 13px; font-weight: 600; }
         .quote-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+        .quote-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
         .quote-page input, .quote-page select, .quote-page textarea {
           display: block;
           width: 100%;
@@ -403,8 +405,21 @@ export default function QuoteRequestForm({
         .quote-success h2 { margin: 0 0 8px; font-size: 22px; }
         .quote-success p { color: #56616d; }
         .quote-page :focus-visible { outline: 3px solid #4590ad; outline-offset: 3px; }
+        .quote-steps { display: flex; gap: 12px; margin: 0 0 20px; padding: 0; list-style: none; color: #56616d; font-size: 13px; font-weight: 700; }
+        .quote-steps [data-current="true"] { color: #006edb; }
+        .quote-wizard h2 { margin: 8px 0 12px; font-size: 28px; }
+        .quote-wizard h3 { margin: 16px 0 4px; font-size: 15px; }
+        .quote-wizard article p { margin: 0; color: #56616d; line-height: 1.5; }
+        .quote-check { display: flex; align-items: center; gap: 8px; }
+        .quote-check input { width: auto; margin: 0; }
+        .quote-stack { display: grid; grid-template-columns: 120px minmax(0, 1fr) auto; gap: 8px 16px; align-items: center; margin: 14px 0; padding: 12px; border: 1px solid #e7ebef; border-radius: 10px; }
+        .quote-stack a { color: #006edb; font-size: 13px; overflow-wrap: anywhere; }
+        .quote-stack span { grid-column: 1 / -1; color: #56616d; font-size: 13px; }
+        .quote-button-secondary { display: inline-flex; width: auto; margin: 0; background: #151f24; }
+        .quote-stack .quote-button { margin: 0; min-height: 36px; padding: 8px 14px; }
+        .quote-button:disabled { opacity: 0.45; cursor: not-allowed; }
         @media (max-width: 640px) {
-          .quote-grid { grid-template-columns: 1fr; }
+          .quote-grid, .quote-grid-3 { grid-template-columns: 1fr; }
           .quote-header {
             flex-wrap: wrap;
             gap: 12px;

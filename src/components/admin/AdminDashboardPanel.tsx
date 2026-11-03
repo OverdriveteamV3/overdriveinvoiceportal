@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { createDefaultState } from "@/lib/drafts";
+import { storeAdminReturnPath } from "@/lib/storage/dbClient";
 import AdminBalanceBreakdownCard from "@/components/admin/AdminBalanceBreakdownCard";
 import AdminClientOnboardModal from "@/components/admin/AdminClientOnboardModal";
 import { formatMoney } from "@/lib/drafts";
@@ -9,8 +12,6 @@ import type { AdminDashboardActivity, AdminDashboardStats } from "@/lib/admin-da
 import { activityIconName, type AdminIconName } from "@/lib/admin-icons";
 import type { DataBinId } from "@/lib/storage/dataBins";
 import AdminIcon from "@/components/admin/AdminIcons";
-import { adminViewPath } from "@/components/admin/admin-nav";
-import { formatCents } from "@/lib/crm/money";
 
 type AdminDashboardPanelProps = {
   stats: AdminDashboardStats;
@@ -143,6 +144,7 @@ type NewSubmission = {
   budget: string;
   timeline: string;
   contact: string;
+  request: string;
   createdAt: string;
   name: string;
   company: string;
@@ -193,17 +195,52 @@ function formatLaunchDate(value: string) {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+type SubmissionDraft = {
+  name: string;
+  company: string;
+  title: string;
+  service: string;
+  budget: string;
+  timeline: string;
+  contact: string;
+  email: string;
+  phone: string;
+  website: string;
+};
+
+function draftFrom(item: NewSubmission): SubmissionDraft {
+  return {
+    name: item.name,
+    company: item.company,
+    title: item.title,
+    service: item.service,
+    budget: item.budget,
+    timeline: item.timeline,
+    contact: item.contact,
+    email: item.email,
+    phone: item.phone,
+    website: item.website,
+  };
+}
+
 function SubmissionCard({
   item,
   pending,
-  onAdd,
+  highlighted,
+  sequence,
+  onSave,
+  onDelete,
 }: {
   item: NewSubmission;
+  sequence: number;
   pending: boolean;
-  onAdd: () => void;
+  highlighted: boolean;
+  onSave: (draft: SubmissionDraft) => Promise<string | null>;
+  onDelete: () => Promise<void>;
 }) {
   const brief = parseSubmissionBrief(item.description);
   const facts = [
+    item.request ? { label: "Request", value: item.request } : null,
     item.service ? { label: "Service", value: item.service } : null,
     item.budget ? { label: "Budget", value: item.budget } : null,
     item.timeline ? { label: "Timeline", value: item.timeline } : null,
@@ -214,19 +251,155 @@ function SubmissionCard({
     item.phone ? { label: "Phone", value: item.phone } : null,
     item.website ? { label: "Website", value: item.website } : null,
   ].filter((fact): fact is { label: string; value: string } => fact !== null);
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<SubmissionDraft>(() => draftFrom(item));
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+
+  function startEdit() {
+    setDraft(draftFrom(item));
+    setEditError("");
+    setEditing(true);
+    setOpen(true);
+  }
+
+  async function saveEdit() {
+    setSaving(true);
+    setEditError("");
+    const message = await onSave(draft);
+    setSaving(false);
+    if (message) {
+      setEditError(message);
+      return;
+    }
+    setEditing(false);
+  }
+
+  async function remove() {
+    const label = item.name || item.title || "this submission";
+    if (!window.confirm(`Delete ${label}?`)) return;
+    await onDelete();
+  }
 
   return (
-    <article className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+    <article
+      id={`submission-${item.id}`}
+      className={`overflow-hidden rounded-xl border bg-white ${
+        highlighted ? "border-[#0780f7] ring-2 ring-[#0780f7]/30" : "border-zinc-200"
+      }`}
+    >
       <header className="flex items-start justify-between gap-4 px-4 py-4">
-        <div className="min-w-0">
-          <p className="truncate text-base font-semibold text-zinc-900">{item.name || "Website lead"}</p>
-          {item.company ? <p className="truncate text-sm text-zinc-500">{item.company}</p> : null}
-          <p className="mt-2 truncate text-sm font-medium text-zinc-800">{item.title}</p>
-        </div>
-        <time className="shrink-0 text-xs text-zinc-400" dateTime={item.createdAt}>
-          {formatActivityDate(item.createdAt)}
-        </time>
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="min-w-0 flex-1 text-left"
+        >
+          <span className="block truncate text-base font-semibold text-zinc-900">{item.name || "Website lead"}</span>
+          {item.company ? <span className="block truncate text-sm text-zinc-500">{item.company}</span> : null}
+          <span className="mt-2 flex min-w-0 items-center gap-2">
+            <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded bg-[#eef6ff] px-1 text-[11px] font-semibold text-[#0560b5]">
+              {sequence}
+            </span>
+            <span className="truncate text-sm font-medium text-zinc-800">{item.title}</span>
+          </span>
+        </button>
+        <span className="flex shrink-0 items-center gap-1">
+          <time className="px-1 text-xs text-zinc-400" dateTime={item.createdAt}>
+            {formatActivityDate(item.createdAt)}
+          </time>
+          <button
+            type="button"
+            aria-label="Edit submission"
+            title="Edit"
+            onClick={startEdit}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900"
+          >
+            <AdminIcon name="pencil" size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label="Delete submission"
+            title="Delete"
+            disabled={pending}
+            onClick={() => void remove()}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-500 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+          >
+            <AdminIcon name="trash" size={15} />
+          </button>
+          <button
+            type="button"
+            aria-label={open ? "Collapse submission" : "Expand submission"}
+            onClick={() => setOpen((value) => !value)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100"
+          >
+            <AdminIcon
+              name="chevron-down"
+              size={16}
+              className={`transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </button>
+        </span>
       </header>
+      {open && editing ? (
+        <form
+          className="space-y-3 border-t border-zinc-100 px-4 py-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void saveEdit();
+          }}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                ["name", "Name"],
+                ["company", "Company"],
+                ["title", "Project"],
+                ["service", "Service"],
+                ["budget", "Budget"],
+                ["timeline", "Timeline"],
+                ["contact", "Prefers"],
+                ["email", "Email"],
+                ["phone", "Phone"],
+                ["website", "Website"],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key} className="block text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                {label}
+                <input
+                  value={draft[key]}
+                  onChange={(event) => setDraft((current) => ({ ...current, [key]: event.target.value }))}
+                  className="mt-1 w-full rounded-md border border-zinc-200 px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-900"
+                />
+              </label>
+            ))}
+          </div>
+          {editError ? (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+              {editError}
+            </p>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded-md border border-zinc-200 px-3 py-2 text-xs font-semibold text-zinc-700"
+              onClick={() => setEditing(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-md bg-[#0780f7] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
+      ) : null}
+      {open && !editing ? (
+        <>
       {facts.length > 0 ? (
         <ul className="grid grid-cols-2 gap-px border-t border-zinc-100 bg-zinc-100 sm:grid-cols-4">
           {facts.map((fact) => (
@@ -278,33 +451,71 @@ function SubmissionCard({
         </div>
       ) : null}
       <footer className="flex justify-end border-t border-zinc-100 px-4 py-3">
-        <button
-          type="button"
-          className="rounded-md bg-[#0780f7] px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          disabled={pending}
-          onClick={onAdd}
-        >
-          {pending ? "Adding…" : "Add to pipeline"}
-        </button>
+        <QuoteButton item={item} />
       </footer>
+        </>
+      ) : null}
     </article>
+  );
+}
+
+function QuoteButton({ item }: { item: NewSubmission }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      className="rounded-md bg-[#0780f7] px-3 py-2 text-xs font-semibold text-white"
+      onClick={() => {
+        const state = createDefaultState("Quote");
+        state.client.clientName = item.name;
+        state.client.companyName = item.company;
+        state.client.email = item.email;
+        state.client.phone = item.phone;
+        state.client.url = item.website.replace(/^https?:\/\//, "");
+        state.client.projectName = item.title;
+        state.services = [
+          {
+            id: 1,
+            service: item.service || "Project",
+            description: item.description.slice(0, 500),
+            quantity: 1,
+            unitPrice: 0,
+          },
+        ];
+        state.deposit = 100;
+        state.notes = [item.budget, item.timeline, item.contact].filter(Boolean).join(" · ");
+        storeAdminReturnPath();
+        sessionStorage.setItem(
+          "overdrive-open-submission",
+          JSON.stringify({ state, draftId: crypto.randomUUID() })
+        );
+        sessionStorage.setItem("overdrive-quote-opportunity", item.id);
+        router.push(`/invoice?opportunity=${item.id}`);
+      }}
+    >
+      Quote
+    </button>
   );
 }
 
 function NewSubmissionTab({
   submissions,
   open,
+  focusId,
   addingId,
   error,
   onToggle,
-  onAdd,
+  onSave,
+  onDelete,
 }: {
   submissions: NewSubmission[];
   open: boolean;
+  focusId: string | null;
   addingId: string | null;
   error: string;
   onToggle: () => void;
-  onAdd: (id: string) => void;
+  onSave: (id: string, draft: SubmissionDraft) => Promise<string | null>;
+  onDelete: (id: string) => Promise<void>;
 }) {
   const count = submissions.length;
   return (
@@ -327,7 +538,7 @@ function NewSubmissionTab({
                 : `${count} start-a-project requests`}
           </span>
           <span className="mt-1 block text-xs text-blue-100">
-            Quotes from the live website. Review one here, then add it to the pipeline.
+            Quotes from the live website. Open one in the invoice editor to send a quote.
           </span>
         </span>
         <span className="grid h-12 min-w-12 place-items-center rounded-full bg-[#f8f959] px-3 text-lg font-bold text-[#151f24]">
@@ -346,12 +557,15 @@ function NewSubmissionTab({
               New Start a Project quotes will show up here.
             </p>
           ) : (
-            submissions.map((item) => (
+            submissions.map((item, index) => (
               <SubmissionCard
                 key={item.id}
                 item={item}
+                sequence={index + 1}
                 pending={addingId === item.id}
-                onAdd={() => onAdd(item.id)}
+                highlighted={item.id === focusId}
+                onSave={(draft) => onSave(item.id, draft)}
+                onDelete={() => onDelete(item.id)}
               />
             ))
           )}
@@ -368,33 +582,46 @@ export default function AdminDashboardPanel({
 }: AdminDashboardPanelProps) {
   const invoiceTotal = stats.openInvoices + stats.closedInvoices;
   const [clientModalOpen, setClientModalOpen] = useState(false);
-  const [crm, setCrm] = useState<{
-    openPipelineCents: number;
-    invoicedCents: number;
-    netCollectedCents: number;
-    overdueCents: number;
-    openTasks: number;
-    projects: number;
-    newSubmissions: NewSubmission[];
-  } | null>(null);
-  const [submissionsOpen, setSubmissionsOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const requestedId = searchParams.get("submission");
+  const [submissions, setSubmissions] = useState<NewSubmission[] | null>(null);
+  const [panel, setPanel] = useState({ request: requestedId ?? "", open: Boolean(requestedId) });
   const [addingId, setAddingId] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState("");
+  const submissionPanelRef = useRef<HTMLDivElement>(null);
+  if (panel.request !== (requestedId ?? "")) {
+    setPanel({ request: requestedId ?? "", open: Boolean(requestedId) });
+  }
+  const submissionsOpen = panel.open;
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/crm/overview")
       .then((response) => (response.ok ? response.json() : null))
       .then((body) => {
-        if (!cancelled && body) {
-          setCrm({ ...body, newSubmissions: body.newSubmissions ?? [] });
-        }
+        if (!cancelled && body) setSubmissions(body.newSubmissions ?? []);
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    function onOpen(event: Event) {
+      const id = (event as CustomEvent<string>).detail;
+      if (typeof id !== "string" || !id) return;
+      setPanel({ request: id, open: true });
+    }
+    window.addEventListener("admin-open-submission", onOpen);
+    return () => window.removeEventListener("admin-open-submission", onOpen);
+  }, []);
+
+  useEffect(() => {
+    if (!requestedId || !submissionsOpen || !submissions) return;
+    const target = document.getElementById(`submission-${requestedId}`) ?? submissionPanelRef.current;
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [requestedId, submissionsOpen, submissions]);
 
   return (
     <div className="space-y-6 p-6">
@@ -434,15 +661,35 @@ export default function AdminDashboardPanel({
         </div>
       </section>
 
-      {crm ? (
-        <section className="grid gap-3 sm:grid-cols-3">
+      {submissions ? (
+        <section ref={submissionPanelRef} className="grid gap-3 sm:grid-cols-3">
           <NewSubmissionTab
-            submissions={crm.newSubmissions}
+            submissions={submissions}
             open={submissionsOpen}
+            focusId={requestedId}
             addingId={addingId}
             error={submissionError}
-            onToggle={() => setSubmissionsOpen((value) => !value)}
-            onAdd={async (id) => {
+            onToggle={() => setPanel((current) => ({ ...current, open: !current.open }))}
+            onSave={async (id, draft) => {
+              try {
+                const response = await fetch(`/api/crm/opportunities/${id}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ action: "update", ...draft }),
+                });
+                const body = (await response.json().catch(() => null)) as { error?: string } | null;
+                if (!response.ok) return body?.error || "Could not save this submission.";
+                setSubmissions((current) =>
+                  current
+                    ? current.map((item) => (item.id === id ? { ...item, ...draft } : item))
+                    : current
+                );
+                return null;
+              } catch {
+                return "Could not save this submission.";
+              }
+            }}
+            onDelete={async (id) => {
               setSubmissionError("");
               setAddingId(id);
               try {
@@ -450,67 +697,23 @@ export default function AdminDashboardPanel({
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({
-                    action: "stage",
-                    stage: "qualification",
-                    reason: "Added to the pipeline from a website project request",
+                    action: "archive",
+                    reason: "Removed from new submissions",
                   }),
                 });
                 const body = (await response.json().catch(() => null)) as { error?: string } | null;
                 if (!response.ok) {
-                  setSubmissionError(body?.error || "Could not add this request to the pipeline.");
+                  setSubmissionError(body?.error || "Could not delete this submission.");
                   return;
                 }
-                setCrm((current) =>
-                  current
-                    ? {
-                        ...current,
-                        newSubmissions: current.newSubmissions.filter((item) => item.id !== id),
-                      }
-                    : current
-                );
+                setSubmissions((current) => (current ? current.filter((item) => item.id !== id) : current));
               } catch {
-                setSubmissionError("Could not add this request to the pipeline.");
+                setSubmissionError("Could not delete this submission.");
               } finally {
                 setAddingId(null);
               }
             }}
           />
-          {[
-            { label: "Open pipeline", value: formatCents(crm.openPipelineCents), detail: "Estimates, not revenue" },
-            { label: "Invoiced", value: formatCents(crm.invoicedCents), detail: "Issued CRM invoices" },
-            { label: "Net collected", value: formatCents(crm.netCollectedCents), detail: "Succeeded payments minus refunds" },
-            { label: "Overdue", value: formatCents(crm.overdueCents), detail: "Outstanding past due" },
-            {
-              label: "Projects",
-              value: String(crm.projects),
-              detail: `${crm.openTasks} open tasks`,
-              href: adminViewPath("projects", "dashboard"),
-            },
-          ].map((card) => {
-            const body = (
-              <>
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">{card.label}</p>
-                <p className="mt-1 text-lg font-semibold text-zinc-900">{card.value}</p>
-                <p className="text-xs text-zinc-500">{card.detail}</p>
-              </>
-            );
-            if (!card.href) {
-              return (
-                <article key={card.label} className="rounded-lg border border-zinc-200 bg-white p-4">
-                  {body}
-                </article>
-              );
-            }
-            return (
-              <Link
-                key={card.label}
-                href={card.href}
-                className="rounded-lg border border-zinc-200 bg-white p-4 transition hover:border-zinc-400"
-              >
-                {body}
-              </Link>
-            );
-          })}
         </section>
       ) : null}
 

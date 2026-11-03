@@ -568,7 +568,7 @@ export async function fetchDeletedRecords(): Promise<{
   return response.json();
 }
 
-export async function downloadCsvExport(bin: DataBinId | "all" = "all"): Promise<void> {
+async function fetchCsvExport(bin: DataBinId | "all") {
   const response = await fetch(`/api/storage/export?bin=${bin}`, {
     cache: "no-store",
   });
@@ -580,8 +580,13 @@ export async function downloadCsvExport(bin: DataBinId | "all" = "all"): Promise
   const blob = await response.blob();
   const disposition = response.headers.get("Content-Disposition");
   const filename =
-    disposition?.match(/filename="([^"]+)"/)?.[1] ?? `overdrive-export-${bin}.csv`;
+    disposition?.match(/filename="([^"]+)"/)?.[1] ??
+    `overdrive-export-${bin === "all" ? `all-${new Date().toISOString().slice(0, 10)}` : bin}.csv`;
 
+  return { blob, filename };
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -590,6 +595,51 @@ export async function downloadCsvExport(bin: DataBinId | "all" = "all"): Promise
   anchor.click();
   anchor.remove();
   URL.revokeObjectURL(url);
+}
+
+export async function downloadCsvExport(bin: DataBinId | "all" = "all"): Promise<void> {
+  const { blob, filename } = await fetchCsvExport(bin);
+  downloadBlob(blob, filename);
+}
+
+export async function promptSaveCsvExport(bin: DataBinId | "all" = "all"): Promise<boolean> {
+  const suggestedName = `overdrive-export-${bin === "all" ? "all" : bin}-${new Date().toISOString().slice(0, 10)}.csv`;
+  const showSaveFilePicker = (
+    window as Window & {
+      showSaveFilePicker?: (options: {
+        suggestedName?: string;
+        types?: Array<{ description?: string; accept: Record<string, string[]> }>;
+      }) => Promise<{
+        createWritable: () => Promise<{
+          write: (data: Blob) => Promise<void>;
+          close: () => Promise<void>;
+        }>;
+      }>;
+    }
+  ).showSaveFilePicker;
+
+  if (!showSaveFilePicker) {
+    await downloadCsvExport(bin);
+    return true;
+  }
+
+  let handle: Awaited<ReturnType<typeof showSaveFilePicker>>;
+  try {
+    handle = await showSaveFilePicker({
+      suggestedName,
+      types: [{ description: "CSV file", accept: { "text/csv": [".csv"] } }],
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return false;
+    await downloadCsvExport(bin);
+    return true;
+  }
+
+  const { blob } = await fetchCsvExport(bin);
+  const writable = await handle.createWritable();
+  await writable.write(blob);
+  await writable.close();
+  return true;
 }
 
 export async function uploadCsvImport(file: File): Promise<{ imported: number }> {

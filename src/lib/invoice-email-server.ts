@@ -1,6 +1,7 @@
 import { readFile } from "fs/promises";
 import path from "path";
 import nodemailer from "nodemailer";
+import { resendEmailAllowed, resolveSmtpConfig } from "@/lib/integration-settings";
 import { Resend } from "resend";
 import type { DraftState } from "@/lib/drafts";
 import {
@@ -111,33 +112,44 @@ function isResendTestModeError(message: string): boolean {
   );
 }
 
+export async function emailDeliveryEnabled(): Promise<boolean> {
+  if (await resolveSmtpConfig()) return true;
+  return resendEmailAllowed();
+}
+
+function fromAddressFor(user: string): string {
+  return (
+    process.env.EMAIL_FROM?.trim() ||
+    (user ? `Over Drive OS <${user}>` : "") ||
+    "Over Drive OS <admin@overdriveio.com>"
+  );
+}
+
 export async function sendPlainEmail(input: {
   to: string;
   subject: string;
   text: string;
 }): Promise<void> {
-  if (!hasEmailConfig()) {
-    throw new Error("Email is not configured.");
-  }
+  const smtp = await resolveSmtpConfig();
   const html = `<p>${input.text.replace(/</g, "&lt;").replace(/\n/g, "<br>")}</p>`;
-  if (hasSmtpConfig()) {
+  if (smtp) {
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === "true",
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
+      auth: { user: smtp.user, pass: smtp.pass },
     });
     await transporter.sendMail({
-      from: getFromAddress(),
+      from: fromAddressFor(smtp.user),
       to: input.to,
       subject: input.subject,
       html,
       text: input.text,
     });
     return;
+  }
+  if (!(await resendEmailAllowed())) {
+    throw new Error("Email is not configured.");
   }
   const resend = new Resend(process.env.RESEND_API_KEY!);
   const { error } = await resend.emails.send({
@@ -154,12 +166,12 @@ export async function sendInvoiceEmail(
   state: DraftState,
   to: string
 ): Promise<void> {
-  if (hasSmtpConfig()) {
+  if (await resolveSmtpConfig()) {
     await sendInvoiceViaSmtp(state, to);
     return;
   }
 
-  if (hasResendConfig()) {
+  if (await resendEmailAllowed()) {
     try {
       await sendInvoiceViaResend(state, to);
       return;
@@ -217,18 +229,18 @@ export async function sendInvoiceViaSmtp(
   const { html, plainText, subject, pdfAttachment } =
     await buildInvoiceEmailBodies(state, to, logo ?? getHostedLogoUrl());
 
+  const smtp = await resolveSmtpConfig();
+  if (!smtp) throw new Error("Email is not configured.");
+
   const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: { user: smtp.user, pass: smtp.pass },
   });
 
   await transporter.sendMail({
-    from: getFromAddress(),
+    from: fromAddressFor(smtp.user),
     to,
     subject,
     html,

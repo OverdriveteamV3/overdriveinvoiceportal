@@ -1,3 +1,4 @@
+import { resolveStripeSecret } from "@/lib/integration-settings";
 import Stripe from "stripe";
 import { calculateDraftTotals, type DraftState } from "@/lib/drafts";
 
@@ -15,8 +16,8 @@ export function hasStripeConfig(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY?.trim());
 }
 
-function getStripeClient(): Stripe {
-  const key = process.env.STRIPE_SECRET_KEY?.trim();
+async function getStripeClient(): Promise<Stripe> {
+  const key = await resolveStripeSecret();
   if (!key) {
     throw new Error("Stripe is not configured");
   }
@@ -27,7 +28,7 @@ export async function createInvoicePaymentUrl(
   state: DraftState,
   customerEmail: string
 ): Promise<string | null> {
-  if (!hasStripeConfig()) return null;
+  if (!(await resolveStripeSecret())) return null;
 
   const totals = calculateDraftTotals(state);
   const amountCents = Math.round(totals.balanceDue * 100);
@@ -38,7 +39,7 @@ export async function createInvoicePaymentUrl(
   const docNumber = client.documentNumber || "Invoice";
   const email = customerEmail.trim() || (client.email ?? "").trim();
 
-  const stripe = getStripeClient();
+  const stripe = await getStripeClient();
   const baseUrl = getPublicAppUrl();
 
   const session = await stripe.checkout.sessions.create({
@@ -77,8 +78,8 @@ export async function createCrmCheckoutUrl(input: {
   currency: string;
   email?: string;
 }): Promise<string | null> {
-  if (!hasStripeConfig() || input.amountCents < 50) return null;
-  const stripe = getStripeClient();
+  if (!(await resolveStripeSecret()) || input.amountCents < 50) return null;
+  const stripe = await getStripeClient();
   const baseUrl = getPublicAppUrl();
   const session = await stripe.checkout.sessions.create({
     mode: "payment",

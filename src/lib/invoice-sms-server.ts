@@ -1,3 +1,4 @@
+import { resolveTwilioConfig } from "@/lib/integration-settings";
 import twilio from "twilio";
 import type { DraftState } from "@/lib/drafts";
 import {
@@ -58,10 +59,13 @@ export async function sendInvoiceSmsServer(
     );
   }
 
+  const twilioConfig = await resolveTwilioConfig();
+  if (!twilioConfig) throw new Error("Twilio is not configured.");
+
   const body = buildInvoiceSmsMessage(state, { paymentUrl });
   const to = `+1${digits}`;
-  const client = getTwilioClient();
-  const fromNumber = process.env.TWILIO_PHONE_NUMBER?.trim();
+  const client = twilio(twilioConfig.accountSid, twilioConfig.authToken);
+  const fromNumber = twilioConfig.fromNumber;
   const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
 
   const message = await client.messages.create({

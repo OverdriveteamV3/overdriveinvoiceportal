@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import AdminMessageDock from "@/components/admin/AdminMessageDock";
 import type { Locale } from "@/lib/locale";
 
 type SupportMessage = {
@@ -32,6 +33,7 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
   const [error, setError] = useState("");
   const threadRef = useRef<HTMLDivElement>(null);
   const hiddenOnPortal = pathname === "/portal" || pathname.startsWith("/portal/");
+  const adminDashboard = pathname === "/admin" || pathname.startsWith("/admin/");
 
   useEffect(() => {
     if (!open) return;
@@ -103,6 +105,7 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
   const waitingOnEmail = !desk.online && desk.messages.length > 0 && !desk.email;
 
   if (hiddenOnPortal) return null;
+  if (adminDashboard) return <AdminMessageDock />;
 
   return (
     <div className="support-dock">

@@ -3,7 +3,7 @@ import type { DraftState } from "@/lib/drafts";
 import { getAdminSessionProfile } from "@/lib/admin-auth-server";
 import {
   buildInvoiceEmailSubject,
-  hasEmailConfig,
+  emailDeliveryEnabled,
   sendInvoiceEmail as sendInvoiceEmailServer,
 } from "@/lib/invoice-email-server";
 
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!hasEmailConfig()) {
+  if (!(await emailDeliveryEnabled())) {
     return NextResponse.json(
       {
         error:

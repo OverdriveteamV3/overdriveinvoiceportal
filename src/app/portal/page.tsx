@@ -2,7 +2,7 @@ import Link from "next/link";
 import LanguageToggle from "@/components/home/LanguageToggle";
 import PortalDashboard from "@/components/portal/PortalDashboard";
 import { getPortalAccount } from "@/lib/crm/portal-account";
-import { crmClient } from "@/lib/crm/db";
+import { crmClient, listClientQuoteOffers } from "@/lib/crm/db";
 import {
   DEMO_PROJECT_NAME_PREFIX,
   type PortalInvoiceSummary,
@@ -135,8 +135,8 @@ export default async function PortalHome({
               ? "Ese enlace de invitación no es válido o ya se usó. Pide uno nuevo a Over Drive."
               : "That invite link is invalid or already used. Ask Over Drive for a new one."
             : es
-              ? "Entra para ver el progreso de tus proyectos, actualizaciones y mensajes."
-              : "Sign in to see project progress, updates, and messages."}
+              ? "Entra para ver el progreso de tus proyectos y las actualizaciones."
+              : "Sign in to see project progress and updates."}
         </p>
         <p className="mt-4">
           <Link href="/sign-in?next=/portal" className="text-sm font-medium text-zinc-900 underline">
@@ -148,12 +148,15 @@ export default async function PortalHome({
   }
 
   const supabase = crmClient();
-  const { data: memberships } = await supabase
-    .from("portal_memberships")
-    .select(
-      "project_id, projects(id, name, created_at, stage, next_action, next_action_due, revision_allowance, rounds_used, order_id, onboarding_items(label, required, state), orders(id, document_number, total_cents, currency, invoices(id, document_number, kind, status, total_cents, currency)))"
-    )
-    .eq("portal_user_id", account.id);
+  const [{ data: memberships }, quoteOffers] = await Promise.all([
+    supabase
+      .from("portal_memberships")
+      .select(
+        "project_id, projects(id, name, created_at, stage, next_action, next_action_due, revision_allowance, rounds_used, order_id, onboarding_items(label, required, state), orders(id, document_number, total_cents, currency, invoices(id, document_number, kind, status, total_cents, currency)))"
+      )
+      .eq("portal_user_id", account.id),
+    listClientQuoteOffers(account.email).catch(() => []),
+  ]);
 
   const liveProjects = (memberships ?? []).flatMap((row) => {
     const linked = (row as { projects?: unknown }).projects;
@@ -174,6 +177,7 @@ export default async function PortalHome({
       }}
       liveProjects={liveProjects}
       hasSeededDemos={hasSeededDemos}
+      quoteOffers={quoteOffers}
     />
   );
 }

@@ -313,8 +313,46 @@ body {
 }
 
 /* ── Admin sidebar ── */
+.admin-shell {
+  @apply min-h-screen bg-[#eceef1] lg:flex lg:h-dvh lg:flex-col lg:overflow-hidden;
+}
+
+.admin-shell-body {
+  @apply mx-auto grid w-full max-w-6xl gap-6 px-6 py-8 lg:min-h-0 lg:flex-1 lg:grid-cols-[280px_1fr] lg:overflow-hidden;
+}
+
+.admin-shell-main {
+  @apply min-h-0 overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm lg:overflow-y-auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.admin-shell-main::-webkit-scrollbar {
+  display: none;
+}
+
+.admin-shell-flow {
+  height: auto;
+  min-height: 100vh;
+  overflow: visible;
+}
+
+.admin-shell-flow .admin-shell-body,
+.admin-shell-flow .admin-shell-main,
+.admin-shell-flow .admin-sidebar {
+  height: auto;
+  max-height: none;
+  overflow: visible;
+}
+
 .admin-sidebar {
-  @apply lg:sticky lg:top-[4.75rem] lg:self-start;
+  @apply lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.admin-sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 /* ── Admin shell ── */
@@ -326,8 +364,16 @@ body {
   @apply min-w-0;
 }
 
+.admin-header-title {
+  @apply mt-0.5 flex min-w-0 items-center gap-3;
+}
+
 .admin-header-brand h1 {
-  @apply mt-0.5 text-lg font-semibold tracking-tight text-zinc-900;
+  @apply text-2xl font-bold tracking-tight text-zinc-900;
+}
+
+.admin-header-title .admin-profile-tag {
+  @apply shrink-0;
 }
 
 .admin-header-back {
@@ -398,12 +444,19 @@ body {
   @apply border-b border-zinc-100 px-4 py-3;
 }
 
+.admin-sidebar-logo {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: transparent;
+}
+
 .admin-sidebar-footer {
   @apply space-y-1 border-t border-zinc-100 bg-zinc-50/60 p-2;
 }
 
 .admin-nav-group-label {
-  @apply px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-400;
+  @apply px-2.5 text-[10px] font-bold uppercase tracking-[0.16em] text-zinc-400;
 }
 
 .admin-nav-section-toggle {
@@ -412,6 +465,11 @@ body {
 
 .admin-nav-section-summary {
   @apply rounded-full bg-zinc-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal text-zinc-500;
+}
+
+.admin-nav-section-light {
+  @apply inline-block h-2 w-2 shrink-0 rounded-full bg-emerald-500;
+  box-shadow: 0 0 0 3px rgb(16 185 129 / 0.18);
 }
 
 .admin-nav-chevron {
@@ -444,7 +502,7 @@ body {
 }
 
 .admin-nav-item {
-  @apply flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition;
+  @apply flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition;
 }
 
 .admin-nav-item:hover {
@@ -452,15 +510,19 @@ body {
 }
 
 .admin-nav-item-active {
-  @apply bg-blue-50 ring-1 ring-inset ring-blue-200;
+  @apply bg-[#eef6ff] text-[#0560b5];
 }
 
 .admin-nav-item-active:hover {
-  @apply bg-blue-50;
+  @apply bg-[#eef6ff];
+}
+
+.admin-nav-item-active span {
+  color: #0560b5;
 }
 
 .admin-nav-icon {
-  @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-600;
+  @apply flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-500;
 }
 
 .admin-nav-icon-muted {
@@ -468,7 +530,7 @@ body {
 }
 
 .admin-nav-item-active .admin-nav-icon {
-  @apply bg-white;
+  @apply bg-white text-[#0780f7];
 }
 
 .admin-nav-badge {
@@ -480,7 +542,7 @@ body {
 }
 
 .admin-sidebar-link {
-  @apply flex items-center gap-3 rounded-lg px-2 py-2.5 transition hover:bg-white;
+  @apply flex items-center gap-2.5 rounded-lg px-2 py-1.5 transition hover:bg-white;
 }
 
 .admin-sidebar-link-active {

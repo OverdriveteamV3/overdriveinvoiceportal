@@ -4,7 +4,8 @@ import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   clearSecondaryEmail,
-  saveDeletionRequest,
+  exportPortalRosterCsv,
+  resetClientPortal,
   saveEmailChange,
   savePasswordChange,
   savePortalAvatar,
@@ -116,11 +117,23 @@ type Copy = {
   imported: string;
   deleteTitle: string;
   deleteBody: string;
-  deleteAction: string;
-  deleteRequested: string;
-  googleDelete: string;
+  resetLabel: string;
+  resetAction: string;
+  resetting: string;
+  csvTitle: string;
+  csvBody: string;
+  csvSave: string;
+  csvSaving: string;
+  csvReset: string;
+  resetDone: string;
+  resetKept: string;
+  resetCsvKept: string;
+  resetFailed: string;
+  resetNeedType: string;
+  confirmWipe: string;
+  confirmWipeSaved: string;
   close: string;
-  confirmDelete: string;
+  cancel: string;
   notices: Record<string, string>;
 };
 
@@ -200,14 +213,28 @@ const EN: Copy = {
   download: "Download CSV",
   importCsv: "Import CSV",
   imported: "Imported",
-  deleteTitle: "Request deletion",
+  deleteTitle: "Reset account",
   deleteBody:
-    "Projects and invoices stay until Over Drive processes the request. There is no stored subscription to cancel.",
-  deleteAction: "Request account deletion",
-  deleteRequested: "Deletion requested",
-  googleDelete: "In-session Google reauthentication is not available, so this request cannot be submitted here.",
+    "This deletes every job, invoice, message, and history record on this account. Your sign-in stays. The projects page starts empty.",
+  resetLabel: "Type RESET to confirm",
+  resetAction: "Reset account data",
+  resetting: "Resetting…",
+  csvTitle: "Save a CSV backup",
+  csvBody: "Save a CSV of this account's jobs and invoices before they are deleted.",
+  csvSave: "Save CSV",
+  csvSaving: "Saving…",
+  csvReset: "Reset",
+  resetDone: "Account data cleared. Projects, invoices, messages, and history are gone.",
+  resetKept: "Account data was not reset.",
+  resetCsvKept: "CSV backup saved. Account data was not reset.",
+  resetFailed: "Account reset failed. Please try again.",
+  resetNeedType: 'Type "RESET" to confirm.',
+  confirmWipe:
+    "This permanently deletes every job, invoice, payment, message, and history item on this account. Your sign-in stays. This cannot be undone.",
+  confirmWipeSaved:
+    "CSV backup saved. This permanently deletes every job, invoice, payment, message, and history item on this account. Your sign-in stays. This cannot be undone.",
   close: "Close",
-  confirmDelete: "Submit request",
+  cancel: "Cancel",
   notices: {
     "email-confirmed": "Your login email is updated.",
     "email-error": "That email link is invalid or expired.",
@@ -293,14 +320,28 @@ const ES: Copy = {
   download: "Descargar CSV",
   importCsv: "Importar CSV",
   imported: "Importado",
-  deleteTitle: "Solicitar eliminación",
+  deleteTitle: "Reiniciar cuenta",
   deleteBody:
-    "Los proyectos y las facturas permanecen hasta que Over Drive procese la solicitud. No hay una suscripción guardada que cancelar.",
-  deleteAction: "Solicitar eliminación de la cuenta",
-  deleteRequested: "Eliminación solicitada",
-  googleDelete: "No se puede volver a autenticar Google en esta sesión, así que la solicitud no está disponible aquí.",
+    "Esto borra cada trabajo, factura, mensaje e historial de esta cuenta. Tu acceso se mantiene. La página de proyectos queda vacía.",
+  resetLabel: "Escribe RESET para confirmar",
+  resetAction: "Reiniciar los datos",
+  resetting: "Reiniciando…",
+  csvTitle: "Guardar una copia CSV",
+  csvBody: "Guarda un CSV de los trabajos y facturas de esta cuenta antes de borrarlos.",
+  csvSave: "Guardar CSV",
+  csvSaving: "Guardando…",
+  csvReset: "Reiniciar",
+  resetDone: "Datos borrados. Proyectos, facturas, mensajes e historial ya no están.",
+  resetKept: "Los datos de la cuenta no se reiniciaron.",
+  resetCsvKept: "CSV guardado. Los datos de la cuenta no se reiniciaron.",
+  resetFailed: "No se pudo reiniciar la cuenta. Inténtalo de nuevo.",
+  resetNeedType: 'Escribe "RESET" para confirmar.',
+  confirmWipe:
+    "Esto elimina de forma permanente cada trabajo, factura, pago, mensaje e historial de esta cuenta. Tu acceso se mantiene. No se puede deshacer.",
+  confirmWipeSaved:
+    "CSV guardado. Esto elimina de forma permanente cada trabajo, factura, pago, mensaje e historial de esta cuenta. Tu acceso se mantiene. No se puede deshacer.",
   close: "Cerrar",
-  confirmDelete: "Enviar solicitud",
+  cancel: "Cancelar",
   notices: {
     "email-confirmed": "Tu correo de acceso quedó actualizado.",
     "email-error": "Ese enlace de correo no es válido o expiró.",
@@ -365,9 +406,14 @@ export default function PortalSettings({
   const [secondaryEmail, setSecondaryEmail] = useState(account.secondaryEmail);
   const [secondaryVerified, setSecondaryVerified] = useState(account.secondaryEmailVerified);
   const [pendingEmail, setPendingEmail] = useState(account.pendingEmail);
-  const [deletionRequestedAt, setDeletionRequestedAt] = useState(account.deletionRequestedAt);
+  const [resetText, setResetText] = useState("");
+  const [csvPromptOpen, setCsvPromptOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [savingCsv, setSavingCsv] = useState(false);
+  const [resetMessage, setResetMessage] = useState("");
+  const [resetError, setResetError] = useState("");
 
-  const [dialog, setDialog] = useState<"email" | "secondary" | "password" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"email" | "secondary" | "password" | null>(null);
   const [dialogError, setDialogError] = useState("");
   const [showCurrent, setShowCurrent] = useState(false);
   const [showNext, setShowNext] = useState(false);
@@ -464,6 +510,75 @@ export default function PortalSettings({
       setAvatarOverride(null);
       router.refresh();
     });
+  }
+
+  async function runPortalReset() {
+    setResetting(true);
+    setResetError("");
+    setResetMessage("");
+    try {
+      const result = await resetClientPortal();
+      if (result.error) {
+        setResetError(result.error);
+        return;
+      }
+      window.location.assign("/portal");
+    } catch {
+      setResetError(copy.resetFailed);
+    } finally {
+      setResetting(false);
+    }
+  }
+
+  function handleMasterReset() {
+    setResetError("");
+    setResetMessage("");
+    if (resetText.trim() !== "RESET") {
+      setResetError(copy.resetNeedType);
+      return;
+    }
+    setCsvPromptOpen(true);
+  }
+
+  async function handleSaveCsvBackup() {
+    setSavingCsv(true);
+    setResetError("");
+    try {
+      const result = await exportPortalRosterCsv();
+      if (result.error || !result.csv) {
+        setResetError(result.error || copy.resetFailed);
+        return;
+      }
+      const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `client-portal-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setCsvPromptOpen(false);
+      if (!window.confirm(copy.confirmWipeSaved)) {
+        setResetMessage(copy.resetCsvKept);
+        return;
+      }
+      await runPortalReset();
+    } catch {
+      setResetError(copy.resetFailed);
+    } finally {
+      setSavingCsv(false);
+    }
+  }
+
+  async function handleContinueReset() {
+    setResetError("");
+    if (!window.confirm(copy.confirmWipe)) {
+      setCsvPromptOpen(false);
+      setResetMessage(copy.resetKept);
+      return;
+    }
+    await runPortalReset();
   }
 
   function closeDialog() {
@@ -872,18 +987,30 @@ export default function PortalSettings({
               ) : null}
             </SettingsCard>
             <SettingsCard title={copy.deleteTitle} description={copy.deleteBody}>
-              {deletionRequestedAt ? (
-                <p className="od-settings-note">
-                  {copy.deleteRequested} {new Date(deletionRequestedAt).toLocaleString(locale)}
+              <div className="od-settings-reset">
+                <SettingsField label={copy.resetLabel}>
+                  <input
+                    value={resetText}
+                    autoComplete="off"
+                    spellCheck={false}
+                    onChange={(event) => setResetText(event.target.value)}
+                  />
+                </SettingsField>
+                <button
+                  type="button"
+                  className="od-settings-danger"
+                  disabled={resetting || savingCsv}
+                  onClick={handleMasterReset}
+                >
+                  {resetting ? copy.resetting : copy.resetAction}
+                </button>
+              </div>
+              {resetMessage ? <p className="od-settings-note">{resetMessage}</p> : null}
+              {resetError ? (
+                <p role="alert" className="od-settings-error">
+                  {resetError}
                 </p>
               ) : null}
-              {account.hasPassword ? (
-                <button type="button" className="od-settings-danger" onClick={() => setDialog("delete")}>
-                  {copy.deleteAction}
-                </button>
-              ) : (
-                <p className="od-settings-note">{copy.googleDelete}</p>
-              )}
             </SettingsCard>
           </div>
         ) : null}
@@ -1041,46 +1168,40 @@ export default function PortalSettings({
       </SettingsDialog>
 
       <SettingsDialog
-        open={dialog === "delete"}
-        title={copy.deleteTitle}
-        description={copy.deleteBody}
+        open={csvPromptOpen}
+        title={copy.csvTitle}
+        description={copy.csvBody}
         closeLabel={copy.close}
-        onClose={closeDialog}
+        onClose={() => {
+          if (resetting || savingCsv) return;
+          setCsvPromptOpen(false);
+        }}
       >
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setDialogError("");
-            startTransition(async () => {
-              const result = await saveDeletionRequest({ currentPassword });
-              if (result.error) {
-                setDialogError(result.error);
-                return;
-              }
-              setDeletionRequestedAt(new Date().toISOString());
-              closeDialog();
-              router.refresh();
-            });
-          }}
-        >
-          <PasswordField
-            label={copy.currentPassword}
-            value={currentPassword}
-            shown={showCurrent}
-            showLabel={copy.show}
-            hideLabel={copy.hide}
-            onToggle={() => setShowCurrent((value) => !value)}
-            onChange={setCurrentPassword}
-          />
-          {dialogError ? (
-            <p role="alert" className="od-settings-error">
-              {dialogError}
-            </p>
-          ) : null}
-          <button type="submit" className="od-settings-danger" disabled={pending}>
-            {pending ? copy.saving : copy.confirmDelete}
+        <div className="od-settings-reset-actions">
+          <button
+            type="button"
+            disabled={resetting || savingCsv}
+            onClick={() => setCsvPromptOpen(false)}
+          >
+            {copy.cancel}
           </button>
-        </form>
+          <button
+            type="button"
+            className="od-settings-reset-save"
+            disabled={resetting || savingCsv}
+            onClick={() => void handleSaveCsvBackup()}
+          >
+            {savingCsv ? copy.csvSaving : copy.csvSave}
+          </button>
+          <button
+            type="button"
+            className="od-settings-danger"
+            disabled={resetting || savingCsv}
+            onClick={() => void handleContinueReset()}
+          >
+            {resetting ? copy.resetting : copy.csvReset}
+          </button>
+        </div>
       </SettingsDialog>
       </div>
     </>

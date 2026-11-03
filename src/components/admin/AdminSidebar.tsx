@@ -2,19 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DATA_BINS, type BinSummary, type DataBinId } from "@/lib/storage/dataBins";
 import {
   ADMIN_NAV_GROUPS,
   CRM_NAV,
-  isCrmView,
-  isDataBinView,
   type AdminView,
   type CrmView,
 } from "@/components/admin/admin-nav";
 import AdminIcon from "@/components/admin/AdminIcons";
 import AdminSidebarSignOut from "@/components/admin/AdminSidebarSignOut";
 import type { AdminIconName } from "@/lib/admin-icons";
+
+const WORKSPACE_ICONS: Record<CrmView, AdminIconName> = {
+  prospects: "user-plus",
+  pipeline: "quotes",
+  orders: "documents",
+  projects: "folder-open",
+  wallet: "credit-card",
+  tasks: "clock",
+  messages: "mail",
+};
 
 export type AdminSidebarProps = {
   bins: BinSummary[];
@@ -23,26 +31,38 @@ export type AdminSidebarProps = {
   onSelectBin: (binId: DataBinId) => void;
   onSelectIntegrations: () => void;
   onSelectCrm?: (view: CrmView) => void;
+  onSelectTeam?: () => void;
   onNavigate?: () => void;
   embedded?: boolean;
 };
 
-const NAV_SECTIONS = ["overview", "people", "documents", "services", "connect"] as const;
+const NAV_SECTIONS = ["people", "documents", "services", "workspace", "connect"] as const;
 type NavSectionKey = (typeof NAV_SECTIONS)[number];
+type SeenCounts = Partial<Record<NavSectionKey, number>>;
+
+const SEEN_KEY = "admin-nav-seen-counts";
 
 const DEFAULT_EXPANDED = Object.fromEntries(
-  NAV_SECTIONS.map((key) => [key, true])
+  NAV_SECTIONS.map((key) => [key, false])
 ) as Record<NavSectionKey, boolean>;
 
-function sectionKeyForView(view: AdminView): NavSectionKey {
-  if (view === "home" || isCrmView(view)) return "overview";
-  if (view === "integrations") return "connect";
-  for (const group of ADMIN_NAV_GROUPS) {
-    if (isDataBinView(view) && group.items.includes(view)) {
-      return group.title.toLowerCase() as NavSectionKey;
-    }
+function readSeen(): SeenCounts {
+  try {
+    const raw = window.localStorage.getItem(SEEN_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as SeenCounts;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
   }
-  return "overview";
+}
+
+function writeSeen(value: SeenCounts) {
+  try {
+    window.localStorage.setItem(SEEN_KEY, JSON.stringify(value));
+  } catch {
+    // The light still works for this visit when storage is blocked.
+  }
 }
 
 function countForBin(bins: BinSummary[], binId: DataBinId): number {
@@ -53,20 +73,18 @@ function groupItemCount(bins: BinSummary[], items: DataBinId[]): number {
   return items.reduce((sum, binId) => sum + countForBin(bins, binId), 0);
 }
 
-const COLLAPSIBLE_SECTIONS = new Set<NavSectionKey>(["documents", "services"]);
-
 function NavSection({
   title,
   expanded,
   onToggle,
-  summary,
+  updated = false,
   collapsible = true,
   children,
 }: {
   title: string;
   expanded?: boolean;
   onToggle?: () => void;
-  summary?: number;
+  updated?: boolean;
   collapsible?: boolean;
   children: React.ReactNode;
 }) {
@@ -89,9 +107,11 @@ function NavSection({
       >
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span>{title}</span>
-          {summary !== undefined && !expanded && (
-            <span className="admin-nav-section-summary">{summary}</span>
-          )}
+          {updated && !expanded ? (
+            <span className="admin-nav-section-light" title="New updates">
+              <span className="sr-only">New updates</span>
+            </span>
+          ) : null}
         </span>
         <span
           className={`admin-nav-chevron ${expanded ? "admin-nav-chevron-open" : ""}`}
@@ -131,16 +151,12 @@ function NavItem({
       className={`admin-nav-item ${active ? "admin-nav-item-active" : ""}`}
     >
       <span className="admin-nav-icon" aria-hidden>
-        <AdminIcon name={icon} size={18} />
+        <AdminIcon name={icon} size={16} />
       </span>
-      <span className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-[13px] font-medium leading-tight">
-          {label}
-        </span>
-        <span className="mt-0.5 block truncate text-[11px] leading-tight text-zinc-400">
-          {description}
-        </span>
+      <span className="min-w-0 flex-1 truncate text-left text-[13px] font-semibold leading-none text-zinc-800">
+        {label}
       </span>
+      <span className="sr-only">{description}</span>
       {count !== undefined && (
         <span className={`admin-nav-badge ${active ? "admin-nav-badge-active" : ""}`}>
           {count}
@@ -157,6 +173,7 @@ export function AdminSidebarNav({
   onSelectBin,
   onSelectIntegrations,
   onSelectCrm,
+  onSelectTeam,
   onNavigate,
   embedded = false,
 }: AdminSidebarProps) {
@@ -166,22 +183,69 @@ export function AdminSidebarNav({
     useState<Record<NavSectionKey, boolean>>(DEFAULT_EXPANDED);
 
   const [supportAlerts, setSupportAlerts] = useState(0);
-
-  useEffect(() => {
-    const key = sectionKeyForView(activeView);
-    setExpanded((prev) => ({ ...prev, [key]: true }));
-  }, [activeView]);
+  const [prospectCount, setProspectCount] = useState(0);
+  const [teamCount, setTeamCount] = useState(0);
+  const [seen, setSeen] = useState<SeenCounts | null>(null);
+  const baselineSet = useRef(false);
+  const binsRef = useRef(bins);
+  binsRef.current = bins;
 
   useEffect(() => {
     let stop = false;
     async function loadAlerts() {
+      let nextAlerts = 0;
+      let nextProspects = 0;
+      let nextTeam = 0;
       try {
         const response = await fetch("/api/crm/support");
-        if (!response.ok) return;
-        const body = await response.json();
-        if (!stop) setSupportAlerts(Number(body.unread) || 0);
+        if (response.ok) {
+          const body = await response.json();
+          nextAlerts = Number(body.unread) || 0;
+        }
       } catch {
         // The nav still works when the support desk is unavailable.
+      }
+      try {
+        const response = await fetch("/api/crm/opportunities");
+        if (response.ok) {
+          const body = await response.json();
+          nextProspects = ((body.opportunities ?? []) as Array<{ stage?: string; archived_at?: string | null }>).filter(
+            (row) => row.stage === "new_lead" && !row.archived_at
+          ).length;
+        }
+      } catch {
+        // The Prospects item still opens when the count cannot load.
+      }
+      try {
+        const response = await fetch("/api/admin/team");
+        if (response.ok) {
+          const body = await response.json();
+          nextTeam = Array.isArray(body.members) ? body.members.length : 0;
+        }
+      } catch {
+        // The Team item still opens when the roster cannot load.
+      }
+      if (stop) return;
+      setSupportAlerts(nextAlerts);
+      setProspectCount(nextProspects);
+      setTeamCount(nextTeam);
+      if (!baselineSet.current) {
+        baselineSet.current = true;
+        const stored = readSeen();
+        const currentBins = binsRef.current;
+        const totals: Record<NavSectionKey, number> = {
+          people: groupItemCount(currentBins, ["clients"]) + nextTeam,
+          documents: groupItemCount(currentBins, ["documents", "quotes", "drafts"]),
+          services: groupItemCount(currentBins, ["lineItems", "labor"]),
+          workspace: nextProspects + nextAlerts,
+          connect: 0,
+        };
+        const next: SeenCounts = { ...stored };
+        for (const key of NAV_SECTIONS) {
+          if (typeof next[key] !== "number") next[key] = totals[key];
+        }
+        writeSeen(next);
+        setSeen(next);
       }
     }
     void loadAlerts();
@@ -192,7 +256,27 @@ export function AdminSidebarNav({
     };
   }, [activeView]);
 
+  const sectionTotals: Record<NavSectionKey, number> = {
+    people: groupItemCount(bins, ["clients"]) + teamCount,
+    documents: groupItemCount(bins, ["documents", "quotes", "drafts"]),
+    services: groupItemCount(bins, ["lineItems", "labor"]),
+    workspace: prospectCount + supportAlerts,
+    connect: 0,
+  };
+
+  const hasUpdate = (key: NavSectionKey) =>
+    seen !== null && !expanded[key] && sectionTotals[key] > (seen[key] ?? sectionTotals[key]);
+
+  const markSeen = (key: NavSectionKey) => {
+    setSeen((prev) => {
+      const next = { ...(prev ?? readSeen()), [key]: sectionTotals[key] };
+      writeSeen(next);
+      return next;
+    });
+  };
+
   const toggle = (key: NavSectionKey) => {
+    if (!expanded[key]) markSeen(key);
     setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
@@ -205,13 +289,18 @@ export function AdminSidebarNav({
     <>
       {!embedded ? (
         <div className="admin-sidebar-header">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
+          <img
+            src="/overdrive-logo.webp"
+            alt="Over Drive"
+            className="admin-sidebar-logo"
+          />
+          <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
             Navigation
           </p>
         </div>
       ) : null}
 
-      <nav className="space-y-3">
+      <nav className="space-y-4">
         <NavSection title="Overview" collapsible={false}>
           <NavItem
             active={activeView === "home"}
@@ -224,15 +313,13 @@ export function AdminSidebarNav({
 
         {ADMIN_NAV_GROUPS.map((group) => {
           const key = group.title.toLowerCase() as NavSectionKey;
-          const collapsible = COLLAPSIBLE_SECTIONS.has(key);
           return (
             <NavSection
               key={group.title}
               title={group.title}
-              collapsible={collapsible}
               expanded={expanded[key]}
               onToggle={() => toggle(key)}
-              summary={groupItemCount(bins, group.items)}
+              updated={hasUpdate(key)}
             >
               {group.items.map((binId) => {
                 const meta = DATA_BINS[binId];
@@ -248,37 +335,50 @@ export function AdminSidebarNav({
                   />
                 );
               })}
+              {group.title === "People" ? (
+                <NavItem
+                  active={activeView === "team"}
+                  label="Team"
+                  description="Admins, agents, and tech seats"
+                  icon="user-plus"
+                  count={teamCount > 0 ? teamCount : undefined}
+                  onClick={() => navigate(() => onSelectTeam?.())}
+                />
+              ) : null}
             </NavSection>
           );
         })}
 
-        <NavSection title="Workspace" collapsible={false}>
+        <NavSection
+          title="Workspace"
+          expanded={expanded.workspace}
+          onToggle={() => toggle("workspace")}
+          updated={hasUpdate("workspace")}
+        >
           {CRM_NAV.map((item) => (
             <NavItem
               key={item.id}
               active={activeView === item.id}
               label={item.label}
               description={item.description}
-              icon={
-                item.id === "messages"
-                  ? "mail"
-                  : item.id === "pipeline"
-                  ? "quotes"
-                  : item.id === "orders"
-                    ? "documents"
-                    : item.id === "projects"
-                      ? "folder-open"
-                      : item.id === "wallet"
-                        ? "credit-card"
-                        : "clock"
+              icon={WORKSPACE_ICONS[item.id]}
+              count={
+                item.id === "messages" && supportAlerts > 0
+                  ? supportAlerts
+                  : item.id === "prospects" && prospectCount > 0
+                    ? prospectCount
+                    : undefined
               }
-              count={item.id === "messages" && supportAlerts > 0 ? supportAlerts : undefined}
               onClick={() => navigate(() => onSelectCrm?.(item.id))}
             />
           ))}
         </NavSection>
 
-        <NavSection title="Connect" collapsible={false}>
+        <NavSection
+          title="Connect"
+          expanded={expanded.connect}
+          onToggle={() => toggle("connect")}
+        >
           <NavItem
             active={activeView === "integrations"}
             label="Integrations"

@@ -71,7 +71,14 @@ export async function getBinSummaries(
   scope: StorageScope
 ): Promise<BinSummary[]> {
   const db = await readDatabase();
-  const records = scopedRecords(db, scope);
+  const records = scopedRecords(db, scope).filter(
+    (record) =>
+      record.data.kind !== "account-phone" &&
+      record.data.kind !== "account-socials" &&
+      record.data.kind !== "integration-settings" &&
+      record.data.kind !== "network-chat" &&
+      record.data.kind !== "site-security"
+  );
 
   return (Object.keys(DATA_BINS) as DataBinId[]).map((binId) => {
     const binRecords = filterBinRecords(records, binId);
@@ -100,7 +107,16 @@ export async function getRecordsByBin(
   binId: DataBinId
 ): Promise<StoredRecord[]> {
   const db = await readDatabase();
-  return filterBinRecords(scopedRecords(db, scope), binId).sort(
+  return filterBinRecords(scopedRecords(db, scope), binId)
+    .filter(
+      (record) =>
+        record.data.kind !== "account-phone" &&
+        record.data.kind !== "account-socials" &&
+        record.data.kind !== "integration-settings" &&
+        record.data.kind !== "network-chat" &&
+        record.data.kind !== "site-security"
+    )
+    .sort(
     (a, b) =>
       new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   );
@@ -260,11 +276,27 @@ export async function clearBin(
   return removed;
 }
 
+const SHARED_PLATFORM_KINDS = new Set([
+  "team-member",
+  "integration-settings",
+  "network-chat",
+  "site-security",
+  "account-phone",
+  "account-socials",
+]);
+
+function isSharedPlatformRecord(record: StoredRecord): boolean {
+  return SHARED_PLATFORM_KINDS.has(String(record.data.kind ?? ""));
+}
+
 export async function resetDatabase(scope: StorageScope): Promise<void> {
   const db = await readDatabase();
-  db.records = db.records.filter((record) => !belongsToScope(record, scope));
+  db.records = db.records.filter(
+    (record) => !belongsToScope(record, scope) || isSharedPlatformRecord(record)
+  );
   db.deletedRecords = db.deletedRecords.filter(
-    (entry) => !belongsToScope(entry.record, scope)
+    (entry) =>
+      !belongsToScope(entry.record, scope) || isSharedPlatformRecord(entry.record)
   );
   await writeDatabase(db);
 }

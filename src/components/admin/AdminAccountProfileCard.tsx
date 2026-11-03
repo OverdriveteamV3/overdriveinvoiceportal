@@ -3,7 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import AdminClientProfileUpload from "@/components/admin/AdminClientProfileUpload";
+import AdminIcon from "@/components/admin/AdminIcons";
+import SocialConnectField from "@/components/admin/SocialConnectField";
 import type { AdminAccountSettings } from "@/lib/admin-account";
+import { formatPhoneNumber } from "@/lib/client-form";
+import { emptySocials, normalizeSocials, type SocialLinks } from "@/lib/socials";
 
 type AdminAccountProfileCardProps = {
   initialSettings: AdminAccountSettings;
@@ -25,12 +29,15 @@ export default function AdminAccountProfileCard({
   const [settings, setSettings] = useState(initialSettings);
   const [displayName, setDisplayName] = useState(initialSettings.displayName);
   const [email, setEmail] = useState(initialSettings.email);
+  const [phone, setPhone] = useState(formatPhoneNumber(initialSettings.phone ?? ""));
   const [website, setWebsite] = useState(initialSettings.website);
+  const [socials, setSocials] = useState<SocialLinks>(normalizeSocials(initialSettings.socials ?? emptySocials()));
   const [logo, setLogo] = useState(initialSettings.logo);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState<string | null>(null);
   const [profileError, setProfileError] = useState<string | null>(null);
 
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -62,7 +69,9 @@ export default function AdminAccountProfileCard({
         body: JSON.stringify({
           displayName,
           email,
+          phone,
           website,
+          socials,
           logo,
         }),
       });
@@ -80,7 +89,9 @@ export default function AdminAccountProfileCard({
         setSettings(data.settings);
         setDisplayName(data.settings.displayName);
         setEmail(data.settings.email);
+        setPhone(formatPhoneNumber(data.settings.phone ?? ""));
         setWebsite(data.settings.website);
+        setSocials(normalizeSocials(data.settings.socials));
         setLogo(data.settings.logo);
       }
 
@@ -141,8 +152,13 @@ export default function AdminAccountProfileCard({
   return (
     <section className="admin-settings-card">
       <div className="flex items-start gap-3">
-        <span className="admin-dash-action-icon mt-0.5 shrink-0">
-          <span className="text-sm font-semibold text-zinc-600">{initials}</span>
+        <span className="admin-dash-action-icon mt-0.5 shrink-0 overflow-hidden">
+          {logo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={logo} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-sm font-semibold text-zinc-600">{initials}</span>
+          )}
         </span>
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-zinc-900">Profile</h3>
@@ -204,6 +220,30 @@ export default function AdminAccountProfileCard({
             />
           </div>
           <div>
+            <label className="doc-label" htmlFor="account-phone">
+              Phone
+            </label>
+            <input
+              id="account-phone"
+              className="field"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="(555) 555-5555"
+              value={phone}
+              onChange={(event) => setPhone(formatPhoneNumber(event.target.value))}
+              disabled={savingProfile}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <SocialConnectField
+              idPrefix="account"
+              value={socials}
+              onChange={setSocials}
+              disabled={savingProfile}
+            />
+          </div>
+          <div className="sm:col-span-2">
             <label className="doc-label" htmlFor="account-website">
               Website
             </label>
@@ -238,15 +278,28 @@ export default function AdminAccountProfileCard({
 
       <form
         onSubmit={handleChangePassword}
-        className="mt-6 space-y-4 border-t border-zinc-100 pt-5"
+        className="mt-6 border-t border-zinc-100 pt-5"
       >
-        <div>
-          <h4 className="text-sm font-semibold text-zinc-900">Change password</h4>
-          <p className="mt-1 text-xs text-zinc-500">
-            Enter your current password, then choose a new one.
-          </p>
-        </div>
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 text-left"
+          aria-expanded={passwordOpen}
+          onClick={() => setPasswordOpen((open) => !open)}
+        >
+          <span>
+            <h4 className="text-sm font-semibold text-zinc-900">Change password</h4>
+            <p className="mt-1 text-xs text-zinc-500">
+              Enter your current password, then choose a new one.
+            </p>
+          </span>
+          <AdminIcon
+            name="chevron-down"
+            size={16}
+            className={`shrink-0 text-zinc-400 transition-transform ${passwordOpen ? "rotate-180" : ""}`}
+          />
+        </button>
 
+        {passwordOpen ? <div className="mt-4 space-y-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <label className="doc-label" htmlFor="account-current-password">
@@ -330,6 +383,7 @@ export default function AdminAccountProfileCard({
             {savingPassword ? "Updating…" : "Update password"}
           </button>
         </div>
+        </div> : null}
       </form>
     </section>
   );

@@ -9,6 +9,7 @@ import {
   PORTAL_SESSION_COOKIE,
   portalCookieOptions,
 } from "@/lib/crm/portal-session";
+import { getIntake, intakeIdFromCookie, patchStack } from "@/lib/onboarding/intake";
 import {
   getSupabaseAnonKey,
   getSupabaseUrl,
@@ -82,6 +83,44 @@ export async function GET(request: NextRequest) {
     (typeof googleIdentity?.id === "string" && googleIdentity.id) ||
     (typeof data.user.user_metadata?.sub === "string" && data.user.user_metadata.sub) ||
     data.user.id;
+
+  if (request.cookies.get("od_onboarding_provider")?.value === "github") {
+    const intake = await getIntake(await intakeIdFromCookie());
+    const githubIdentity = identities.find((identity) => identity.provider === "github");
+    const metadata = (githubIdentity?.identity_data ?? data.user.user_metadata ?? {}) as Record<string, unknown>;
+    const login =
+      (typeof metadata.user_name === "string" && metadata.user_name) ||
+      (typeof metadata.preferred_username === "string" && metadata.preferred_username) ||
+      "";
+    const githubEmail = email.trim().toLowerCase();
+    const gmail = intake?.stack.gmail?.email?.trim().toLowerCase() ?? "";
+    const matches = Boolean(intake && githubEmail && gmail && githubEmail === gmail);
+    const response = NextResponse.redirect(
+      new URL(matches ? "/quote?step=2" : "/quote?step=2&stack=github&error=mismatch", origin)
+    );
+    response.cookies.set("od_onboarding_provider", "", { path: "/", maxAge: 0 });
+    response.cookies.set(OAUTH_NEXT_COOKIE, "", { path: "/", maxAge: 0 });
+    response.cookies.set(OAUTH_FLOW_COOKIE, "", { path: "/", maxAge: 0 });
+    if (matches && intake) {
+      await patchStack(intake.id, { github: { login, email: githubEmail, verified: true } });
+    }
+    return response;
+  }
+
+  if (request.cookies.get("od_onboarding_provider")?.value === "gmail") {
+    const intake = await getIntake(await intakeIdFromCookie());
+    const gmail = email.trim().toLowerCase();
+    const response = NextResponse.redirect(
+      new URL(gmail.endsWith("@gmail.com") && intake ? "/quote?step=2" : "/quote?step=2&stack=gmail&error=gmail", origin)
+    );
+    response.cookies.set("od_onboarding_provider", "", { path: "/", maxAge: 0 });
+    response.cookies.set(OAUTH_NEXT_COOKIE, "", { path: "/", maxAge: 0 });
+    response.cookies.set(OAUTH_FLOW_COOKIE, "", { path: "/", maxAge: 0 });
+    if (intake && gmail.endsWith("@gmail.com")) {
+      await patchStack(intake.id, { gmail: { email: gmail, verified: true } });
+    }
+    return response;
+  }
 
   const result = await upsertPortalUserFromGoogle({ email, name, sub, avatarUrl });
   if ("error" in result) {

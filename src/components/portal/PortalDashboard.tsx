@@ -5,11 +5,9 @@ import { useMemo, useState, useTransition, type CSSProperties } from "react";
 import AccountMenu from "@/components/portal/AccountMenu";
 import LanguageToggle from "@/components/home/LanguageToggle";
 import PortalHistory from "@/components/portal/PortalHistory";
-import PortalMessagesPanel from "@/components/portal/PortalMessagesPanel";
 import ProjectCard from "@/components/portal/ProjectCard";
 import WorkflowTips from "@/components/portal/WorkflowTips";
 import {
-  buildPortalAlerts,
   isCompletedProject,
   isCurrentProject,
   type PortalProjectCard,
@@ -30,19 +28,88 @@ type Props = {
   account: Account;
   liveProjects: PortalProjectCard[];
   hasSeededDemos: boolean;
+  quoteOffers?: QuoteOffer[];
 };
+
+type QuoteOffer = {
+  id: string;
+  title: string;
+  stage: string;
+  service: string;
+};
+
+function QuoteDecisions({ offers, es }: { offers: QuoteOffer[]; es: boolean }) {
+  const [mode, setMode] = useState<"" | "decline" | "negotiate">("");
+  const [activeId, setActiveId] = useState("");
+  const [memo, setMemo] = useState("");
+  const [message, setMessage] = useState("");
+  const [pending, start] = useTransition();
+  if (offers.length === 0) return null;
+
+  function send(offer: QuoteOffer, decision: "accept" | "decline" | "negotiate") {
+    start(async () => {
+      setMessage("");
+      const response = await fetch("/api/portal/quote-decision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ opportunityId: offer.id, decision, memo }),
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setMessage(body.error || "Could not save that decision.");
+        return;
+      }
+      window.location.reload();
+    });
+  }
+
+  return (
+    <section className="od-portal-list" aria-label="Quote decisions">
+      {offers.map((offer) => (
+        <article key={offer.id} className="od-portal-empty">
+          <h2>{offer.title}</h2>
+          <p>{offer.service}</p>
+          {offer.stage === "accepted_pending" ? (
+            <ol>
+              <li>Quote accepted</li>
+              <li>In progress</li>
+              <li>Review</li>
+            </ol>
+          ) : offer.stage === "quote_sent" ? (
+            <div>
+              <button type="button" disabled={pending} onClick={() => send(offer, "accept")}>Accept job</button>
+              <button type="button" disabled={pending} onClick={() => { setActiveId(offer.id); setMode("decline"); }}>Decline job</button>
+              <button type="button" disabled={pending} onClick={() => { setActiveId(offer.id); setMode("negotiate"); }}>Negotiate job</button>
+              {activeId === offer.id && mode ? (
+                <label>
+                  {mode === "decline" ? "Memo" : "Note"}
+                  <textarea value={memo} onChange={(event) => setMemo(event.target.value)} />
+                  <button type="button" disabled={pending || !memo.trim()} onClick={() => send(offer, mode)}>
+                    Send
+                  </button>
+                </label>
+              ) : null}
+            </div>
+          ) : (
+            <p>{offer.stage === "negotiation" ? "Negotiation is with the team." : "This quote was declined."}</p>
+          )}
+        </article>
+      ))}
+      {message ? <p role="alert">{message}</p> : null}
+    </section>
+  );
+}
 
 export default function PortalDashboard({
   locale,
   account,
   liveProjects,
   hasSeededDemos,
+  quoteOffers = [],
 }: Props) {
   const es = locale === "es";
   const [view, setView] = useState<"overview" | "history">("overview");
-  const [messagesOpen, setMessagesOpen] = useState(false);
-  const [messagesTab, setMessagesTab] = useState<"alerts" | "messages">("alerts");
-  const [showUiDemos, setShowUiDemos] = useState(true);
+  const [showUiDemos, setShowUiDemos] = useState(false);
   const [seedError, setSeedError] = useState("");
   const [seedMessage, setSeedMessage] = useState("");
   const [pending, startTransition] = useTransition();
@@ -72,8 +139,6 @@ export default function PortalDashboard({
     () => projects.filter((project) => !isCompletedProject(project)),
     [projects]
   );
-
-  const alerts = useMemo(() => buildPortalAlerts(overviewProjects, es), [overviewProjects, es]);
 
   const stats = useMemo(() => {
     const active = overviewProjects.filter((project) => project.stage !== "cancelled").length;
@@ -112,11 +177,6 @@ export default function PortalDashboard({
       completedShare: share(completed, jobTotal),
     };
   }, [overviewProjects, historyProjects]);
-
-  function openMessages(tab: "alerts" | "messages") {
-    setMessagesTab(tab);
-    setMessagesOpen(true);
-  }
 
   function seedDemos() {
     setSeedError("");
@@ -177,10 +237,6 @@ export default function PortalDashboard({
               onClick={() => setView("history")}
             >
               {es ? "Historial" : "History"}
-            </button>
-            <button type="button" onClick={() => openMessages("alerts")}>
-              <span>{es ? "Mensajes" : "Messages"}</span>
-              {alerts.length > 0 ? <span className="od-portal-nav-badge">{alerts.length}</span> : null}
             </button>
             <Link href="/quote" className="od-portal-start">
               {es ? "Iniciar un proyecto" : "Start a Project"}
@@ -375,6 +431,7 @@ export default function PortalDashboard({
 
           {view === "overview" ? (
             <div className="od-portal-overview">
+              <QuoteDecisions offers={quoteOffers} es={es} />
               <WorkflowTips locale={locale} projects={overviewProjects} />
               <section className="od-portal-list" aria-label={es ? "Lista de proyectos" : "Project list"}>
                 {overviewProjects.length === 0 ? (
@@ -395,16 +452,6 @@ export default function PortalDashboard({
           )}
         </div>
       </div>
-
-      <PortalMessagesPanel
-        locale={locale}
-        open={messagesOpen}
-        onClose={() => setMessagesOpen(false)}
-        alerts={alerts}
-        defaultName={account.name}
-        defaultEmail={account.email}
-        initialTab={messagesTab}
-      />
     </div>
   );
 }
