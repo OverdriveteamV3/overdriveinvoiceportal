@@ -92,11 +92,8 @@ export async function postVisitorMessage(input: {
   if (!name || message.length < 2) {
     throw new Error("Add your name and a message.");
   }
-  if (email && !email.includes("@")) {
-    throw new Error("Enter a valid email, or leave it blank while we are online.");
-  }
-  if (!online && !email.includes("@")) {
-    throw new Error("Add your email so we can reply while support is offline.");
+  if (!email.includes("@")) {
+    throw new Error("Add your email so we can reply.");
   }
 
   const supabase = crmClient();

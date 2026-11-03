@@ -2,25 +2,30 @@
 
 import { useState } from "react";
 import AdminIcon from "@/components/admin/AdminIcons";
-import type { SecuritySuggestion } from "@/lib/site-security";
 
 type AdminSecurityCardProps = {
   initialMaintenance: boolean;
-  suggestions: SecuritySuggestion[];
+  initialEmail: string;
+  initialMessage: string;
   canToggle: boolean;
 };
 
 export default function AdminSecurityCard({
   initialMaintenance,
-  suggestions,
+  initialEmail,
+  initialMessage,
   canToggle,
 }: AdminSecurityCardProps) {
   const [open, setOpen] = useState(false);
   const [maintenance, setMaintenance] = useState(initialMaintenance);
+  const [email, setEmail] = useState(initialEmail);
+  const [message, setMessage] = useState(initialMessage);
   const [busy, setBusy] = useState(false);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [savingMessage, setSavingMessage] = useState(false);
   const [error, setError] = useState("");
-
-  const attentionCount = suggestions.filter((item) => item.tone === "attention").length;
+  const [emailNote, setEmailNote] = useState("");
+  const [messageNote, setMessageNote] = useState("");
 
   async function toggleMaintenance() {
     if (!canToggle || busy) return;
@@ -49,6 +54,56 @@ export default function AdminSecurityCard({
     }
   }
 
+  async function saveEmail() {
+    if (!canToggle || savingEmail) return;
+    setSavingEmail(true);
+    setError("");
+    setEmailNote("");
+    try {
+      const response = await fetch("/api/admin/security", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const payload = (await response.json()) as { email?: string; error?: string };
+      if (!response.ok || typeof payload.email !== "string") {
+        setError(payload.error || "Could not save the maintenance email.");
+        return;
+      }
+      setEmail(payload.email);
+      setEmailNote("Saved. The maintenance page email link uses this address.");
+    } catch {
+      setError("Could not save the maintenance email.");
+    } finally {
+      setSavingEmail(false);
+    }
+  }
+
+  async function saveMessage() {
+    if (!canToggle || savingMessage) return;
+    setSavingMessage(true);
+    setError("");
+    setMessageNote("");
+    try {
+      const response = await fetch("/api/admin/security", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+      const payload = (await response.json()) as { message?: string; error?: string };
+      if (!response.ok || typeof payload.message !== "string") {
+        setError(payload.error || "Could not save the maintenance message.");
+        return;
+      }
+      setMessage(payload.message);
+      setMessageNote("Saved. The maintenance page shows this paragraph.");
+    } catch {
+      setError("Could not save the maintenance message.");
+    } finally {
+      setSavingMessage(false);
+    }
+  }
+
   return (
     <section className="admin-settings-card">
       <button
@@ -62,7 +117,7 @@ export default function AdminSecurityCard({
         </span>
         <span className="min-w-0 flex-1">
           <span className="flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-zinc-900">Security</h3>
+            <h3 className="text-sm font-semibold text-zinc-900">Maintenance</h3>
             <AdminIcon
               name="chevron-down"
               size={16}
@@ -71,43 +126,90 @@ export default function AdminSecurityCard({
           </span>
           <p className="mt-1 text-sm text-zinc-500">
             {open
-              ? "Suggestions for this dashboard, and the public website switch."
+              ? "Turn the public website on or off."
               : maintenance
                 ? "Maintenance page is on — click to expand"
-                : `${attentionCount} suggestion${attentionCount === 1 ? "" : "s"} — click to expand`}
+                : "Website is live — click to expand"}
           </p>
         </span>
       </button>
 
       {open ? (
-        <div className="mt-4 space-y-4 border-t border-zinc-100 pt-4">
-          <ul className="space-y-2">
-            {suggestions.map((item) => (
-              <li
-                key={item.title}
-                className="rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3"
-              >
-                <p className="flex items-start gap-2 text-sm font-semibold text-zinc-900">
-                  <span
-                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                      item.tone === "good" ? "bg-emerald-500" : "bg-amber-500"
-                    }`}
-                    aria-hidden
-                  />
-                  {item.title}
-                </p>
-                <p className="mt-1 pl-4 text-sm leading-relaxed text-zinc-500">{item.detail}</p>
-              </li>
-            ))}
-          </ul>
-
+        <div className="mt-4 border-t border-zinc-100 pt-4">
           <div className="flex items-start justify-between gap-4 rounded-xl border border-zinc-200 px-4 py-3">
             <div className="min-w-0">
               <p className="text-sm font-semibold text-zinc-900">Enable maintenance page</p>
               <p className="mt-1 text-sm leading-relaxed text-zinc-500">
-                Replaces the public website with a maintenance page. Home, pricing, work, quote, and
-                policy pages go down. The dashboard, client portal, and invoices stay open.
+                Public pages show a maintenance page. Admin, portal, and invoices stay open.
               </p>
+              {canToggle ? (
+                <a
+                  href="/api/admin/site-preview"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-3 inline-flex items-center rounded-md border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-900 hover:bg-zinc-50"
+                >
+                  Preview website
+                </a>
+              ) : null}
+              <label className="mt-3 block text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                Contact email
+                <input
+                  type="email"
+                  value={email}
+                  required
+                  disabled={!canToggle || savingEmail}
+                  autoComplete="off"
+                  placeholder="admin@overdriveio.com"
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setEmailNote("");
+                  }}
+                  className="mt-1 w-full rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium normal-case tracking-normal text-zinc-900 disabled:opacity-60"
+                />
+              </label>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-xs text-zinc-500">
+                  {emailNote || "This address is the email link on the maintenance page."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void saveEmail()}
+                  disabled={!canToggle || savingEmail || !email.includes("@")}
+                  className="shrink-0 rounded-md bg-[#0780f7] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {savingEmail ? "Saving…" : "Save email"}
+                </button>
+              </div>
+              <label className="mt-3 block text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                Maintenance message
+                <textarea
+                  value={message}
+                  required
+                  rows={4}
+                  maxLength={1000}
+                  disabled={!canToggle || savingMessage}
+                  onChange={(event) => {
+                    setMessage(event.target.value);
+                    setMessageNote("");
+                  }}
+                  className="mt-1 w-full resize-y rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm font-medium normal-case leading-relaxed tracking-normal text-zinc-900 disabled:opacity-60"
+                />
+              </label>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-xs text-zinc-500">
+                  {messageNote ||
+                    "Shown on the maintenance page. A new line starts a second line. “email us” links to the contact email."}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void saveMessage()}
+                  disabled={!canToggle || savingMessage || !message.trim()}
+                  className="shrink-0 rounded-md bg-[#0780f7] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+                >
+                  {savingMessage ? "Saving…" : "Save message"}
+                </button>
+              </div>
               {error ? (
                 <p className="mt-2 text-sm text-red-600" role="alert">
                   {error}
@@ -126,9 +228,9 @@ export default function AdminSecurityCard({
               }`}
             >
               <span
-                className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-                  maintenance ? "translate-x-5" : "translate-x-0.5"
-                }`}
+                aria-hidden
+                className="pointer-events-none absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-[left] duration-150"
+                style={{ left: maintenance ? 22 : 2 }}
               />
             </button>
           </div>

@@ -2,8 +2,11 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AppInitSync } from "@/components/AppInitSync";
 import CookieNotice from "@/components/home/CookieNotice";
+import DevPreviewBar from "@/components/home/DevPreviewBar";
 import SupportChat from "@/components/home/SupportChat";
 import { getLocale } from "@/lib/get-locale";
+import { isDevSitePreview } from "@/lib/site-preview";
+import { isSiteMaintenanceOn } from "@/lib/site-security";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -26,7 +29,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const locale = await getLocale();
+  const [locale, devPreview, maintenance] = await Promise.all([
+    getLocale(),
+    isDevSitePreview(),
+    isSiteMaintenanceOn(),
+  ]);
+  const preview = devPreview && maintenance;
   return (
     <html
       lang={locale}
@@ -34,6 +42,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AppInitSync />
+        {preview ? <DevPreviewBar /> : null}
         {children}
         <CookieNotice locale={locale} />
         <SupportChat locale={locale} />

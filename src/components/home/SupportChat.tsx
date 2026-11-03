@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import AdminMessageDock from "@/components/admin/AdminMessageDock";
@@ -49,6 +50,9 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
           email: String(body.email ?? ""),
           messages: body.messages ?? [],
         });
+        if (body.email) {
+          setEmail((current) => current || String(body.email));
+        }
         setReady(true);
       } catch {
         if (!stop) setReady(true);
@@ -101,8 +105,7 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
   }
 
   const es = locale === "es";
-  const emailRequired = ready && !desk.online && !desk.email;
-  const waitingOnEmail = !desk.online && desk.messages.length > 0 && !desk.email;
+  const emailReady = email.includes("@");
 
   if (hiddenOnPortal) return null;
   if (adminDashboard) return <AdminMessageDock />;
@@ -125,11 +128,11 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
             <p className="support-from-team">
               {desk.online
                 ? es
-                  ? "Hola. Estamos en línea y podemos conversar aquí. El correo es opcional."
-                  : "Hi. We are online, so we can chat here. Email is optional."
+                  ? "Hola. Estamos en línea. Agrega tu correo para enviar un mensaje."
+                  : "Hi. We are online. Add your email to send a message."
                 : es
-                  ? "Hola. Estamos fuera de línea. Deja una nota y tu correo, y te responderemos por correo."
-                  : "Hi. We are offline. Leave a note and your email, and we will reply by email."}
+                  ? "Hola. Estamos fuera de línea. Deja tu correo y un mensaje, y te responderemos por correo."
+                  : "Hi. We are offline. Leave your email and a message, and we will reply by email."}
             </p>
             {desk.messages.map((item) => (
               <p
@@ -139,13 +142,6 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
                 {item.body}
               </p>
             ))}
-            {waitingOnEmail ? (
-              <p className="support-from-team">
-                {es
-                  ? "Agrega un correo si aún quieres una respuesta cuando estemos fuera de línea."
-                  : "Add an email if you still want a reply after we go offline."}
-              </p>
-            ) : null}
           </div>
 
           <form onSubmit={onSubmit}>
@@ -162,23 +158,21 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
                 />
               </label>
             )}
-            {desk.email ? null : (
-              <label>
-                <span>
-                  {es ? "Correo" : "Email"} {emailRequired ? <abbr title="required">*</abbr> : <em>{es ? "opcional" : "optional"}</em>}
-                </span>
-                <input
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  required={emailRequired}
-                  aria-required={emailRequired}
-                  maxLength={200}
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-              </label>
-            )}
+            <label>
+              <span>
+                {es ? "Correo" : "Email"} <abbr title="required">*</abbr>
+              </span>
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                aria-required
+                maxLength={200}
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
             <label>
               {es ? "Mensaje" : "Message"}
               <textarea
@@ -196,10 +190,13 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
                 {error}
               </p>
             ) : null}
-            <button className="support-send" type="submit" disabled={sending || !ready}>
+            <button className="support-send" type="submit" disabled={sending || !ready || !emailReady}>
               {sending ? (es ? "Enviando…" : "Sending…") : es ? "Enviar" : "Send"}
             </button>
           </form>
+          <Link href="/admin" className="support-admin">
+            {es ? "Panel de administración" : "Admin"}
+          </Link>
         </section>
       ) : null}
 
@@ -310,7 +307,18 @@ export default function SupportChat({ locale = "en" }: { locale?: Locale }) {
           background: #0780f7;
           color: #fff;
         }
-        .support-panel form { display: grid; gap: 10px; padding: 0 16px 16px; }
+        .support-panel form { display: grid; gap: 10px; padding: 0 16px 8px; }
+        .support-admin {
+          display: block;
+          margin: 0 16px 14px;
+          color: #0780f7;
+          font-size: 13px;
+          font-weight: 700;
+          text-align: center;
+          text-decoration: none;
+        }
+        .support-admin:hover,
+        .support-admin:focus-visible { text-decoration: underline; }
         .support-panel label {
           display: grid;
           gap: 4px;

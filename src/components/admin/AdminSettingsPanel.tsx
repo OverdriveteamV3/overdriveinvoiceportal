@@ -10,7 +10,6 @@ import AdminIcon from "@/components/admin/AdminIcons";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import type { AdminIconName } from "@/lib/admin-icons";
 import type { AdminAccountSettings } from "@/lib/admin-account";
-import type { SecuritySuggestion } from "@/lib/site-security";
 import type { AdminProfileListItem } from "@/lib/admin-profiles";
 import { DATA_BINS, type BinSummary, type DataBinId, type DeletedRecord } from "@/lib/storage/dataBins";
 import {
@@ -43,7 +42,8 @@ type AdminSettingsPanelProps = {
   initialAdminProfiles?: AdminProfileListItem[];
   initialAccountSettings: AdminAccountSettings;
   maintenanceEnabled: boolean;
-  securitySuggestions: SecuritySuggestion[];
+  maintenanceEmail: string;
+  maintenanceMessage: string;
 };
 
 function formatProfileDate(iso: string): string {
@@ -239,7 +239,8 @@ export default function AdminSettingsPanel({
   initialAdminProfiles = [],
   initialAccountSettings,
   maintenanceEnabled,
-  securitySuggestions,
+  maintenanceEmail,
+  maintenanceMessage,
 }: AdminSettingsPanelProps) {
   const router = useRouter();
   const [confirmText, setConfirmText] = useState("");
@@ -1006,7 +1007,8 @@ export default function AdminSettingsPanel({
 
             <AdminSecurityCard
               initialMaintenance={maintenanceEnabled}
-              suggestions={securitySuggestions}
+              initialEmail={maintenanceEmail}
+              initialMessage={maintenanceMessage}
               canToggle={isMasterAdmin}
             />
 

@@ -54,7 +54,8 @@ export default async function AdminSettingsPage() {
       initialAdminProfiles={adminProfiles}
       initialAccountSettings={accountSettings}
       maintenanceEnabled={security.maintenance}
-      securitySuggestions={security.suggestions}
+      maintenanceEmail={security.email}
+      maintenanceMessage={security.message}
     />
   );
 }

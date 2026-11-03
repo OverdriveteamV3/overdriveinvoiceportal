@@ -1,29 +1,46 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { MASTER_PROFILE_ID } from "@/lib/admin-auth-constants";
-import { getMasterPasswordHash } from "@/lib/admin-account";
-import { listAdminProfileSummaries } from "@/lib/admin-profiles";
-import { getIntegrationPublicView } from "@/lib/integration-settings";
 import { getRecordById, upsertRecord } from "@/lib/storage/internalDatabase";
 
 const KIND = "site-security";
+export const DEFAULT_MAINTENANCE_EMAIL = "admin@overdriveio.com";
+export const DEFAULT_MAINTENANCE_MESSAGE =
+  "The Over Drive IO website is under maintenance.\nIf you need to get in touch with us, email us or select the customer service chat at the bottom right of your screen.";
 
-export type SecuritySuggestion = {
-  title: string;
-  detail: string;
-  tone: "good" | "attention";
+type MaintenanceSettings = {
+  maintenance: boolean;
+  email: string;
+  message: string;
 };
 
 function recordId() {
   return `site-security-${MASTER_PROFILE_ID}`;
 }
 
-export async function isSiteMaintenanceOn(): Promise<boolean> {
-  noStore();
-  const record = await getRecordById({ profileId: MASTER_PROFILE_ID }, recordId());
-  return record?.data.kind === KIND && record.data.maintenance === true;
+function contactEmail(value: unknown): string {
+  const email = typeof value === "string" ? value.trim() : "";
+  return email.includes("@") && !email.includes(" ") ? email : DEFAULT_MAINTENANCE_EMAIL;
 }
 
-export async function setSiteMaintenance(enabled: boolean): Promise<void> {
+function contactMessage(value: unknown): string {
+  const message = typeof value === "string" ? value.trim() : "";
+  return message ? message.slice(0, 1000) : DEFAULT_MAINTENANCE_MESSAGE;
+}
+
+async function readSettings(): Promise<MaintenanceSettings> {
+  noStore();
+  const record = await getRecordById({ profileId: MASTER_PROFILE_ID }, recordId());
+  if (!record || record.data.kind !== KIND) {
+    return { maintenance: false, email: DEFAULT_MAINTENANCE_EMAIL, message: DEFAULT_MAINTENANCE_MESSAGE };
+  }
+  return {
+    maintenance: record.data.maintenance === true,
+    email: contactEmail(record.data.email),
+    message: contactMessage(record.data.message),
+  };
+}
+
+async function writeSettings(next: MaintenanceSettings): Promise<void> {
   await upsertRecord(
     { profileId: MASTER_PROFILE_ID },
     {
@@ -31,92 +48,45 @@ export async function setSiteMaintenance(enabled: boolean): Promise<void> {
       binId: "notes",
       label: "Site security",
       source: "admin-demo",
-      data: { kind: KIND, maintenance: enabled },
+      data: {
+        kind: KIND,
+        maintenance: next.maintenance,
+        email: next.email,
+        message: next.message,
+      },
     }
   );
 }
 
-export async function getSecurityOverview(): Promise<{
-  maintenance: boolean;
-  suggestions: SecuritySuggestion[];
-}> {
-  const [maintenance, integrations, passwordHash, profiles] = await Promise.all([
-    isSiteMaintenanceOn(),
-    getIntegrationPublicView(),
-    getMasterPasswordHash(),
-    listAdminProfileSummaries(),
-  ]);
+export async function isSiteMaintenanceOn(): Promise<boolean> {
+  return (await readSettings()).maintenance;
+}
 
-  const teamCount = profiles.length;
-  const suggestions: SecuritySuggestion[] = [
-    passwordHash
-      ? {
-          title: "Master password is saved in the dashboard",
-          detail: "Change it from Profile if anyone else has used it.",
-          tone: "good",
-        }
-      : {
-          title: "Set a unique master password",
-          detail:
-            "Sign-in still uses the environment password. Save a new one under Profile.",
-          tone: "attention",
-        },
-    integrations.email.connected
-      ? {
-          title: "Invoice email is connected",
-          detail: "Quotes and invoices can send from the connected mailbox.",
-          tone: "good",
-        }
-      : {
-          title: "Connect invoice email",
-          detail: "The live site cannot send quotes until email is connected.",
-          tone: "attention",
-        },
-    integrations.stripe.connected
-      ? {
-          title: "Card payments are connected",
-          detail: "Stripe is available for deposits and invoices.",
-          tone: "good",
-        }
-      : {
-          title: "Connect Stripe before taking payments",
-          detail: "Public deposits stay blocked until a Stripe key is saved.",
-          tone: "attention",
-        },
-    integrations.storage.connected
-      ? {
-          title: "Records are on cloud storage",
-          detail: "Dashboard data is stored off this computer.",
-          tone: "good",
-        }
-      : {
-          title: "Move records to cloud storage",
-          detail: "Local storage can be lost if this computer is reset.",
-          tone: "attention",
-        },
-    teamCount > 0
-      ? {
-          title: "Review team seats",
-          detail: `${teamCount} dashboard ${teamCount === 1 ? "user has" : "users have"} a sign-in besides the master account. Remove anyone who should not open settings.`,
-          tone: "attention",
-        }
-      : {
-          title: "Only the master account can sign in",
-          detail: "No extra dashboard users are stored.",
-          tone: "good",
-        },
-    {
-      title: "Sign out on shared computers",
-      detail: "Dashboard access stays open in this browser until you sign out.",
-      tone: "attention",
-    },
-    {
-      title: "Keep payment and mail secrets out of documents",
-      detail:
-        "SMTP, Stripe, and Twilio values belong in settings. Do not paste them into invoices, chats, or client forms.",
-      tone: "attention",
-    },
-  ];
+export async function getMaintenanceContactEmail(): Promise<string> {
+  return (await readSettings()).email;
+}
 
-  return { maintenance, suggestions };
+export async function setSiteMaintenance(enabled: boolean): Promise<void> {
+  const current = await readSettings();
+  await writeSettings({ ...current, maintenance: enabled });
+}
+
+export async function setMaintenanceMessage(message: string): Promise<void> {
+  const next = message.trim().slice(0, 1000);
+  if (!next) throw new Error("Enter a maintenance message.");
+  const current = await readSettings();
+  await writeSettings({ ...current, message: next });
+}
+
+export async function setMaintenanceContactEmail(email: string): Promise<void> {
+  const next = email.trim().slice(0, 200);
+  if (!next.includes("@") || next.includes(" ")) {
+    throw new Error("Enter a valid email address.");
+  }
+  const current = await readSettings();
+  await writeSettings({ ...current, email: next });
+}
+
+export async function getSecurityOverview(): Promise<MaintenanceSettings> {
+  return readSettings();
 }
