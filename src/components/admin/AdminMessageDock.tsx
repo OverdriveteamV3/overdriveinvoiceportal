@@ -218,6 +218,7 @@ export default function AdminMessageDock() {
           const stored = readSeen();
           const next: SeenMap = { ...stored };
           for (const item of FOLDERS) {
+            if (item.id === "network") continue;
             if (!Array.isArray(next[item.id])) {
               next[item.id] = nextInbox[item.id].map((entry) => entry.id);
             }
